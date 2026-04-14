@@ -1,14 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, ArrowLeft, CheckCircle, Lock, KeyRound, Eye, EyeOff } from 'lucide-react';
+import { Mail, ArrowLeft, Lock, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  InputOTP, 
-  InputOTPGroup, 
-  InputOTPSlot 
-} from '@/components/ui/input-otp';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { sendOTP, verifyOTP, resetPassword } from '@/services/otpService';
 import { toast } from 'sonner';
 type Step = 'email' | 'otp' | 'password';
@@ -22,12 +18,10 @@ const ForgotPasswordPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError('');
-
     try {
       await sendOTP(email);
       setStep('otp');
@@ -39,7 +33,6 @@ const ForgotPasswordPage: React.FC = () => {
       setIsSubmitting(false);
     }
   };
-
   const handleVerifyOTP = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (otp.length !== 6) return;

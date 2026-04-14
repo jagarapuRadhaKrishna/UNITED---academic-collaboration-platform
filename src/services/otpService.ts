@@ -13,11 +13,16 @@ export const sendOTP = async (email: string) => {
     throw new Error('Invalid request');
   }
 
-  const res = await fetch('/api/send-otp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim() }),
-  });
+  let res: Response;
+  try {
+    res = await fetch('/api/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+  } catch {
+    throw new Error('Cannot reach the auth server. Make sure the backend is running (cd server && npm start).');
+  }
 
   const body: { error?: string } = await res.json().catch(() => ({}));
 

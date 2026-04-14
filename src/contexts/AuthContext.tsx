@@ -131,6 +131,7 @@ export interface RegisterData {
   contactNo?: string;
   gender?: string;
   role: 'student' | 'faculty';
+  studentType?: 'regular' | 'lateral';
   skills: string[];
   profilePictureUrl?: string;
   rollNumber?: string;

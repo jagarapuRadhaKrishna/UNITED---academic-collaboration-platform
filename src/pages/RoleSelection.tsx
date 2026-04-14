@@ -37,17 +37,17 @@ const RoleSelection: React.FC = () => {
           minHeight: '100vh',
           display: 'flex',
           alignItems: 'center',
-          background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 50%, #FEF3C7 100%)',
+          background: 'linear-gradient(160deg, #0f0f0f 0%, #1a1a2e 50%, #16213e 100%)',
           py: 8,
         }}
       >
         <Container maxWidth="md">
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
             <Box sx={{ textAlign: 'center', mb: 6 }}>
-              <Typography variant="h2" sx={{ color: '#111827', fontWeight: 700, mb: 2 }}>
-                Join <Box component="span" sx={{ color: '#2563EB' }}>UnitEd</Box>
+              <Typography variant="h2" sx={{ color: '#f1f5f9', fontWeight: 700, mb: 2 }}>
+                Join <Box component="span" sx={{ color: '#60a5fa' }}>UnitEd</Box>
               </Typography>
-              <Typography variant="h6" sx={{ color: '#6B7280', fontWeight: 400 }}>
+              <Typography variant="h6" sx={{ color: '#94a3b8', fontWeight: 400 }}>
                 Select your role to get started
               </Typography>
             </Box>
@@ -66,13 +66,16 @@ const RoleSelection: React.FC = () => {
                       sx={{
                         height: '100%',
                         borderRadius: 4,
-                        border: '2px solid transparent',
+                        border: '2px solid rgba(255,255,255,0.08)',
+                        background: 'rgba(255,255,255,0.05)',
+                        backdropFilter: 'blur(10px)',
                         transition: 'all 0.3s ease',
                         cursor: 'pointer',
                         '&:hover': {
                           transform: 'translateY(-8px)',
                           borderColor: role.color,
-                          boxShadow: `0 20px 40px ${role.color}30`,
+                          boxShadow: `0 20px 40px ${role.color}40`,
+                          background: 'rgba(255,255,255,0.08)',
                         },
                       }}
                       onClick={() => navigate(role.path)}
@@ -94,11 +97,11 @@ const RoleSelection: React.FC = () => {
                           <Icon size={40} color={role.color} strokeWidth={2} />
                         </Box>
 
-                        <Typography variant="h5" sx={{ color: '#111827', fontWeight: 700, mb: 2, textAlign: 'center' }}>
+                        <Typography variant="h5" sx={{ color: '#f1f5f9', fontWeight: 700, mb: 2, textAlign: 'center' }}>
                           {role.title}
                         </Typography>
 
-                        <Typography variant="body2" sx={{ color: '#6B7280', mb: 3, textAlign: 'center', lineHeight: 1.7 }}>
+                        <Typography variant="body2" sx={{ color: '#94a3b8', mb: 3, textAlign: 'center', lineHeight: 1.7 }}>
                           {role.description}
                         </Typography>
 
@@ -106,7 +109,7 @@ const RoleSelection: React.FC = () => {
                           {role.features.map((feature, idx) => (
                             <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                               <Box sx={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: role.color }} />
-                              <Typography variant="body2" sx={{ color: '#374151' }}>
+                              <Typography variant="body2" sx={{ color: '#cbd5e1' }}>
                                 {feature}
                               </Typography>
                             </Box>
@@ -136,28 +139,28 @@ const RoleSelection: React.FC = () => {
               })}
             </Box>
 
-            <Box sx={{ textAlign: 'center', mt: 4 }}>
-              <Typography variant="body2" sx={{ color: '#6B7280' }}>
-                Already have an account?{' '}
-                <Button
-                  onClick={() => navigate('/login')}
-                  sx={{
-                    color: '#fff',
-                    fontWeight: 700,
-                    textTransform: 'none',
-                    fontSize: '0.82rem',
-                    px: 1.5, py: 0.4,
-                    minWidth: 'auto',
-                    borderRadius: '6px',
-                    background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
-                    boxShadow: '0 2px 8px rgba(37,99,235,0.25)',
-                    transition: 'all 0.18s',
-                    '&:hover': { background: 'linear-gradient(135deg, #1e40af, #1d4ed8)', boxShadow: '0 4px 12px rgba(37,99,235,0.35)' },
-                  }}
-                >
-                  Login here
-                </Button>
+            <Box sx={{ textAlign: 'center', mt: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <Typography variant="body2" sx={{ color: '#94a3b8' }}>
+                Already have an account?
               </Typography>
+              <Button
+                onClick={() => navigate('/login')}
+                sx={{
+                  color: '#fff',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  fontSize: '1rem',
+                  px: 4, py: 1.2,
+                  minWidth: 160,
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
+                  boxShadow: '0 4px 14px rgba(37,99,235,0.35)',
+                  transition: 'all 0.18s',
+                  '&:hover': { background: 'linear-gradient(135deg, #1e40af, #1d4ed8)', boxShadow: '0 6px 20px rgba(37,99,235,0.45)', transform: 'translateY(-1px)' },
+                }}
+              >
+                Login here
+              </Button>
             </Box>
           </motion.div>
         </Container>

@@ -4,24 +4,17 @@ import { Button } from "@/components/ui/button";
 interface AppErrorBoundaryProps {
   children: React.ReactNode;
 }
-
 interface AppErrorBoundaryState {
   hasError: boolean;
 }
-
 class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
-  public state: AppErrorBoundaryState = {
-    hasError: false,
-  };
-
+  public state: AppErrorBoundaryState = {hasError: false,};
   public static getDerivedStateFromError(): AppErrorBoundaryState {
     return { hasError: true };
   }
-
   public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("Unhandled application error:", error, errorInfo);
   }
-
   private handleRetry = () => {
     this.setState({ hasError: false });
     window.location.reload();
@@ -31,7 +24,6 @@ class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, AppErrorBo
     if (!this.state.hasError) {
       return this.props.children;
     }
-
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-xl">
@@ -50,5 +42,4 @@ class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, AppErrorBo
     );
   }
 }
-
 export default AppErrorBoundary;

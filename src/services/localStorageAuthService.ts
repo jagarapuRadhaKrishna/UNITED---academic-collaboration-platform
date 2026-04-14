@@ -31,6 +31,7 @@ export interface RegisterData {
   contactNo: string;
   gender: 'Male' | 'Female' | 'Other' | 'Prefer not to say';
   role: 'student' | 'faculty';
+  studentType?: 'regular' | 'lateral';
   skills: string[];
   profilePictureUrl?: string;
   rollNumber?: string;
