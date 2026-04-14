@@ -2,7 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 // ---------------------------------------------------------------------------
 // Step 1 — Send OTP
-// Delegates to the Express auth server (server/index.js) which:
+// Delegates to /api/send-otp, served by the local auth server in development
+// and by a Vercel serverless function in production. The endpoint:
 //   • validates format + checks profile existence
 //   • rate-limits (3 requests / 10 min)
 //   • generates the OTP, stores it in DB, and emails it
@@ -21,7 +22,7 @@ export const sendOTP = async (email: string) => {
       body: JSON.stringify({ email: email.trim() }),
     });
   } catch {
-    throw new Error('Cannot reach the auth server. Make sure the backend is running (cd server && npm start).');
+    throw new Error('Cannot reach the OTP service. Check the local backend in development or the deployed API function in production.');
   }
 
   const body: { error?: string } = await res.json().catch(() => ({}));
