@@ -1,7 +1,10 @@
 import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://briynvmtsinfomfsvxag.supabase.co';
+const SUPABASE_URL =
+  (process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    'https://ioxoiahhfprwqexccelg.supabase.co').trim();
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
 const RATE_LIMIT_MAX = 3;
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
@@ -11,15 +14,29 @@ function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-function getSupabaseAdmin() {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!serviceRoleKey) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY is not configured.');
+function getSupabaseClient() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+
+  if (serviceRoleKey) {
+    return {
+      client: createClient(SUPABASE_URL, serviceRoleKey, {
+        auth: { persistSession: false },
+      }),
+      canCheckProfile: true,
+    };
   }
 
-  return createClient(SUPABASE_URL, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
+  if (anonKey) {
+    return {
+      client: createClient(SUPABASE_URL, anonKey, {
+        auth: { persistSession: false },
+      }),
+      canCheckProfile: false,
+    };
+  }
+
+  throw new Error('No Supabase key configured for OTP delivery.');
 }
 
 function getTransporter() {
@@ -80,25 +97,29 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid request' });
     }
 
-    const supabaseAdmin = getSupabaseAdmin();
+    const { client: supabaseClient, canCheckProfile } = getSupabaseClient();
 
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('email')
-      .ilike('email', email)
-      .maybeSingle();
+    if (canCheckProfile) {
+      const { data: profile, error: profileError } = await supabaseClient
+        .from('profiles')
+        .select('email')
+        .ilike('email', email)
+        .maybeSingle();
 
-    if (profileError) {
-      console.error('[send-otp] Profile lookup error:', profileError.message);
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+      if (profileError) {
+        console.error('[send-otp] Profile lookup error:', profileError.message);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
 
-    if (!profile) {
-      return res.status(400).json({ error: 'Invalid request' });
+      if (!profile) {
+        return res.status(400).json({ error: 'Invalid request' });
+      }
+    } else {
+      console.warn('[send-otp] SUPABASE_SERVICE_ROLE_KEY missing. Skipping profile existence check.');
     }
 
     const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
-    const { count, error: countError } = await supabaseAdmin
+    const { count, error: countError } = await supabaseClient
       .from('otp_codes')
       .select('*', { count: 'exact', head: true })
       .ilike('email', email)
@@ -113,7 +134,7 @@ export default async function handler(req, res) {
       return res.status(429).json({ error: 'Too many requests. Please wait before requesting a new OTP.' });
     }
 
-    const { error: invalidateError } = await supabaseAdmin
+    const { error: invalidateError } = await supabaseClient
       .from('otp_codes')
       .delete()
       .ilike('email', email)
@@ -127,7 +148,7 @@ export default async function handler(req, res) {
     const otp = generateOTP();
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS).toISOString();
 
-    const { error: insertError } = await supabaseAdmin
+    const { error: insertError } = await supabaseClient
       .from('otp_codes')
       .insert({ email, otp, expires_at: expiresAt, is_used: false, attempt_count: 0 });
 
