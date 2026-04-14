@@ -1,0 +1,742 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Search, Filter, Users, Calendar, MessageSquare, Plus, Trash2, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { fetchPostMemberCounts, isPostDeadlineReached, syncExpiredPosts } from '@/services/postAvailabilityService';
+import { rankPostsWithTfLiteCosineSimilarity, type PostRecommendationScore } from '@/services/tfLitePostRecommendationService';
+import { getDescriptionPreviewText } from '@/lib/post-description';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
+interface SkillRequirement {
+  skills: string[];
+  requiredCount: number;
+  acceptedCount?: number;
+  skill?: string; // legacy
+}
+
+interface HomePost {
+  id: string;
+  title: string;
+  description: string;
+  chatroomId?: string | null;
+  author: { id: string; name: string; avatar?: string; type: 'Student' | 'Faculty' };
+  skills: string[];
+  requirements: SkillRequirement[];
+  requiredMembers: number;
+  acceptedMembers: number;
+  purpose: string;
+  createdAt: string;
+  deadline?: string | null;
+  isOwned: boolean;
+}
+
+const HomePage: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
+  const [searchTerm, setSearchTerm] = useState('');
+  const initialTab = (location.state as any)?.activeTab ?? 'all';
+  const [filterTab, setFilterTab] = useState(initialTab);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [skillSearchTerm, setSkillSearchTerm] = useState('');
+  const [posts, setPosts] = useState<HomePost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [confirmDeletePostId, setConfirmDeletePostId] = useState<string | null>(null);
+  const [animatingDeletePostId, setAnimatingDeletePostId] = useState<string | null>(null);
+  const [recommendationScores, setRecommendationScores] = useState<Record<string, PostRecommendationScore>>({});
+  const [refreshTick, setRefreshTick] = useState(0);
+  const hasLoadedOnceRef = useRef(false);
+
+  const fetchPosts = useCallback(async (backgroundRefresh = false) => {
+    if (!backgroundRefresh || !hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
+    try {
+      await syncExpiredPosts();
+      const { data: postRows, error: postsError } = await supabase
+        .from('posts')
+        .select('*')
+        .in('status', ['active', 'filled'])
+        .order('created_at', { ascending: false });
+
+      if (postsError) throw postsError;
+
+      const memberSets = new Map<string, Set<string>>();
+      let rpcMemberCounts = new Map<string, number>();
+      const chatroomMap = new Map<string, string>();
+      const rows = postRows || [];
+
+      rows.forEach((post: any) => {
+        if (post.chatroom_id) chatroomMap.set(post.id, post.chatroom_id);
+      });
+
+      const postIds = rows.map((post: any) => post.id);
+      if (postIds.length > 0) {
+        const [{ data: acceptedApps }, { data: acceptedInvs }, chatMembersRes, rpcCounts] = await Promise.all([
+          supabase
+            .from('applications')
+            .select('post_id, applicant_id')
+            .in('post_id', postIds)
+            .eq('status', 'accepted'),
+          supabase
+            .from('invitations')
+            .select('post_id, invitee_id')
+            .in('post_id', postIds)
+            .eq('status', 'accepted'),
+          chatroomMap.size > 0
+            ? supabase
+                .from('chatroom_members')
+                .select('chatroom_id, user_id')
+                .in('chatroom_id', Array.from(chatroomMap.values()))
+            : Promise.resolve({ data: [] as any[] }),
+          fetchPostMemberCounts(postIds),
+        ]);
+
+        rpcMemberCounts = rpcCounts;
+
+        (acceptedApps || []).forEach((application) => {
+          if (!memberSets.has(application.post_id)) memberSets.set(application.post_id, new Set());
+          memberSets.get(application.post_id)!.add(application.applicant_id);
+        });
+        (acceptedInvs || []).forEach((invitation) => {
+          if (!memberSets.has(invitation.post_id)) memberSets.set(invitation.post_id, new Set());
+          memberSets.get(invitation.post_id)!.add(invitation.invitee_id);
+        });
+
+        const chatMembers = chatMembersRes.data || [];
+        chatMembers.forEach((member: any) => {
+          const postId = Array.from(chatroomMap.entries()).find(([, chatroomId]) => chatroomId === member.chatroom_id)?.[0];
+          if (!postId) return;
+          if (!memberSets.has(postId)) memberSets.set(postId, new Set());
+          memberSets.get(postId)!.add(member.user_id);
+        });
+      }
+
+      const authorIds = [...new Set(rows.map((post: any) => post.author_id).filter(Boolean))];
+      const profilesRes = authorIds.length > 0
+        ? await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, role, profile_picture_url')
+            .in('id', authorIds)
+        : { data: [], error: null };
+
+      if (profilesRes.error) throw profilesRes.error;
+
+      const profileMap = new Map((profilesRes.data || []).map((profile) => [profile.id, profile]));
+
+      const toRequirements = (rawRequirements: unknown): SkillRequirement[] =>
+        ((rawRequirements as SkillRequirement[]) || []).map((requirement) => ({
+          skills: requirement.skills || (requirement.skill ? [requirement.skill] : []),
+          requiredCount: requirement.requiredCount,
+          acceptedCount: requirement.acceptedCount || 0,
+        }));
+
+      const resolveAcceptedMembers = (postRow: any, requirements: SkillRequirement[]) => {
+        const rpcCount = rpcMemberCounts.get(postRow.id) ?? 0;
+        const set = memberSets.get(postRow.id);
+        const setSize = set ? set.size : 0;
+        const setMinusAuthor = set ? (set.has(postRow.author_id) ? setSize - 1 : setSize) : 0;
+        const fallback = requirements.reduce((sum, requirement) => sum + (requirement.acceptedCount || 0), 0);
+        return Math.max(0, rpcCount, postRow.current_members ?? 0, setMinusAuthor, fallback);
+      };
+
+      const syncVisibleCount = async (postId: string, acceptedMembers: number, requiredMembers: number, currentStatus: string) => {
+        const nextStatus =
+          requiredMembers > 0 && acceptedMembers >= requiredMembers && currentStatus === 'active'
+            ? 'filled'
+            : requiredMembers > 0 && acceptedMembers < requiredMembers && currentStatus === 'filled'
+              ? 'active'
+              : currentStatus;
+
+        try {
+          await supabase
+            .from('posts')
+            .update({ current_members: acceptedMembers, status: nextStatus })
+            .eq('id', postId);
+        } catch (syncError) {
+          console.error('Failed to sync post count:', syncError);
+        }
+      };
+
+      const syncedUpdates = rows
+        .map((post: any) => {
+          const requirements = toRequirements(post.skill_requirements);
+          const requiredMembers = post.max_members ?? requirements.reduce((sum, requirement) => sum + requirement.requiredCount, 0);
+          const acceptedMembers = resolveAcceptedMembers(post, requirements);
+
+          return {
+            id: post.id,
+            authorId: post.author_id,
+            acceptedMembers,
+            requiredMembers,
+            currentMembers: post.current_members ?? 0,
+            status: post.status,
+          };
+        })
+        .filter((entry) => entry.acceptedMembers !== entry.currentMembers && entry.authorId === user?.id);
+
+      setPosts(rows.map((post: any) => {
+        const author = profileMap.get(post.author_id);
+        const requirements = toRequirements(post.skill_requirements);
+        const requiredMembers = post.max_members ?? requirements.reduce((sum, requirement) => sum + requirement.requiredCount, 0);
+        const acceptedMembers = resolveAcceptedMembers(post, requirements);
+
+        return {
+          id: post.id,
+          title: post.title,
+          description: post.description,
+          chatroomId: post.chatroom_id ?? null,
+          author: {
+            id: post.author_id,
+            name: author ? `${author.first_name || ''} ${author.last_name || ''}`.trim() : 'Unknown',
+            avatar: author?.profile_picture_url || undefined,
+            type: author?.role === 'faculty' ? 'Faculty' : 'Student',
+          },
+          skills: requirements.flatMap((requirement) => requirement.skills),
+          requirements,
+          requiredMembers,
+          acceptedMembers,
+          purpose: post.purpose,
+          createdAt: post.created_at,
+          deadline: post.deadline ?? null,
+          isOwned: post.author_id === user?.id,
+        };
+      }));
+
+      void Promise.all(
+        syncedUpdates.map((entry) => syncVisibleCount(entry.id, entry.acceptedMembers, entry.requiredMembers, entry.status))
+      );
+    } catch (error) {
+      console.error('Failed to load posts:', error);
+      setPosts([]);
+    } finally {
+      hasLoadedOnceRef.current = true;
+      setLoading(false);
+    }
+  }, [user?.id, user]);
+
+  useEffect(() => {
+    void fetchPosts(hasLoadedOnceRef.current);
+  }, [fetchPosts, refreshTick]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel('home-member-counts')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'applications' }, () => setRefreshTick(t => t + 1))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'invitations' }, () => setRefreshTick(t => t + 1))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chatroom_members' }, () => setRefreshTick(t => t + 1))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => setRefreshTick(t => t + 1))
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const intervalId = window.setInterval(() => {
+      setRefreshTick((tick) => tick + 1);
+    }, 10000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setRefreshTick((tick) => tick + 1);
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user?.id]);
+
+  const userSkills = user?.skills || [];
+  const userSkillSignature = userSkills.join('|');
+  const allSkills = Array.from(new Set(posts.flatMap(p => p.skills)));
+  const filteredSkillOptions = allSkills.filter((skill) =>
+    skill.toLowerCase().includes(skillSearchTerm.toLowerCase())
+  );
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const buildRecommendations = async () => {
+      if (!user?.id || user.role === 'faculty' || posts.length === 0) {
+        if (!isCancelled) {
+          setRecommendationScores({});
+        }
+        return;
+      }
+
+      const candidatePosts = posts.filter((post) => post.author.id !== user.id);
+      if (candidatePosts.length === 0) {
+        if (!isCancelled) {
+          setRecommendationScores({});
+        }
+        return;
+      }
+
+      try {
+        const result = await rankPostsWithTfLiteCosineSimilarity(
+          {
+            id: user.id,
+            skills: userSkills,
+          },
+          candidatePosts.map((post) => ({
+            id: post.id,
+            title: post.title,
+            skillRequirements: post.requirements,
+          })),
+        );
+
+        if (isCancelled) return;
+
+        setRecommendationScores(
+          result.scores.reduce<Record<string, PostRecommendationScore>>((accumulator, score) => {
+            accumulator[score.postId] = score;
+            return accumulator;
+          }, {}),
+        );
+      } catch (recommendationError) {
+        console.error('TensorFlow Lite recommendation generation failed:', recommendationError);
+        if (!isCancelled) {
+          setRecommendationScores({});
+        }
+      }
+    };
+
+    void buildRecommendations();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [posts, user?.id, user?.role, userSkillSignature]);
+
+  const handleSkillToggle = (skill: string) => {
+    setSelectedSkills(prev => prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]);
+  };
+
+  const isMyPost = (post: HomePost) => user?.id === post.author.id;
+
+  const getMatchScore = (post: HomePost): number => {
+    return Math.round(recommendationScores[post.id]?.matchPercent ?? 0);
+  };
+
+  const getMatchBand = (score: number): 'Strong match' | 'Moderate match' | 'Low match' => {
+    if (score >= 65) return 'Strong match';
+    if (score >= 40) return 'Moderate match';
+    return 'Low match';
+  };
+
+  const handleDeleteClick = (postId: string) => {
+    setConfirmDeletePostId(postId);
+  };
+
+  const handleDeletePost = async () => {
+    if (!user?.id) return;
+    if (!confirmDeletePostId) return;
+
+    setDeletingPostId(confirmDeletePostId);
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', confirmDeletePostId)
+        .eq('author_id', user.id);
+
+      if (error) {
+        console.error('Delete post failed:', error);
+        setDeletingPostId(null);
+        return;
+      }
+
+      setAnimatingDeletePostId(confirmDeletePostId);
+      setConfirmDeletePostId(null);
+      window.setTimeout(() => {
+        setPosts((prev) => prev.filter((p) => p.id !== confirmDeletePostId));
+        setAnimatingDeletePostId(null);
+        setDeletingPostId(null);
+      }, 260);
+    } catch (err) {
+      console.error('Delete post failed:', err);
+      setDeletingPostId(null);
+    } finally {
+      if (confirmDeletePostId && animatingDeletePostId !== confirmDeletePostId) {
+        setConfirmDeletePostId(null);
+      }
+      setDeletingPostId(null);
+    }
+  };
+
+  const filteredPosts = posts.filter(post => {
+    const participantsFilled = post.requiredMembers > 0 && post.acceptedMembers >= post.requiredMembers;
+    const deadlineReached = isPostDeadlineReached(post.deadline);
+    const descriptionText = getDescriptionPreviewText(post.description).toLowerCase();
+    const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      descriptionText.includes(searchTerm.toLowerCase());
+
+    if (deadlineReached) return false;
+    if (user?.role === 'faculty') return matchesSearch && isMyPost(post);
+
+    let matchesTab = true;
+    if (filterTab === 'all') matchesTab = !isMyPost(post) && !participantsFilled;
+    else if (filterTab === 'skill') {
+      const postSkillsLower = post.skills.map(s => s.toLowerCase());
+      matchesTab =
+        !isMyPost(post) &&
+        !participantsFilled &&
+        (selectedSkills.length === 0 ||
+          selectedSkills.every(s => postSkillsLower.includes(s.toLowerCase())));
+    } else if (filterTab === 'my') matchesTab = isMyPost(post);
+
+    return matchesSearch && matchesTab;
+  }).sort((a, b) => {
+    // In "All Posts" and "Skill-Based" tabs, sort by match score descending
+    if (filterTab === 'all' || filterTab === 'skill') {
+      return getMatchScore(b) - getMatchScore(a);
+    }
+    return 0;
+  });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">
+              Welcome back, {user?.firstName || 'User'}! 👋
+            </h1>
+            <p className="text-muted-foreground text-sm">
+              {user?.role === 'faculty'
+                ? 'Viewing your created posts'
+                : `Showing opportunities matching your skills: ${userSkills.length > 0 ? userSkills.join(', ') : 'No skills added yet'}`}
+            </p>
+          </div>
+          <Button onClick={() => navigate('/create-post')} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+            <Plus size={16} className="mr-1" />
+            <span className="tracking-in-expand-normal">Create Post</span>
+          </Button>
+        </div>
+
+        {/* Skills Info Banner */}
+        {userSkills.length === 0 && user?.role !== 'faculty' && (
+          <div className="p-3 mb-4 rounded-lg bg-united-amber/10 border border-united-amber/30">
+            <p className="text-sm text-united-amber font-medium">
+              💡 Tip: Add skills to your profile to see personalized opportunities!{' '}
+              <button onClick={() => navigate('/settings/profile')} className="text-accent font-semibold hover:underline ml-1">
+                Update Profile
+              </button>
+            </p>
+          </div>
+        )}
+
+        {/* Search Bar */}
+        <Card className="mb-4">
+          <CardContent className="p-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={20} />
+              <Input
+                placeholder="Search opportunities..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-10 border-none shadow-none focus-visible:ring-0"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Filter Tabs */}
+        {user?.role !== 'faculty' && (
+          <Card className="mb-4">
+            <Tabs value={filterTab} onValueChange={setFilterTab}>
+              <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-auto p-0">
+                <TabsTrigger value="all" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold px-6 py-3">
+                  <span className={filterTab === 'all' ? 'tracking-in-expand-normal' : ''}>All Posts</span>
+                </TabsTrigger>
+                <TabsTrigger value="skill" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold px-6 py-3">
+                  <span className={filterTab === 'skill' ? 'tracking-in-expand-normal' : ''}>Skill-Based</span>
+                </TabsTrigger>
+                <TabsTrigger value="my" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold px-6 py-3">
+                  <span className={filterTab === 'my' ? 'tracking-in-expand-normal' : ''}>My Posts</span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <AnimatePresence initial={false}>
+              {filterTab === 'skill' && (
+                <motion.div
+                  key="skill-filter"
+                  className="p-3"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Filter size={18} className="text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Filter by skills:</span>
+                  </div>
+                  <div className="mb-3 max-w-sm">
+                    <Input
+                      placeholder="Search skills..."
+                      value={skillSearchTerm}
+                      onChange={(event) => setSkillSearchTerm(event.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filteredSkillOptions.map(skill => (
+                      <button
+                        key={skill}
+                        onClick={() => handleSkillToggle(skill)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          selectedSkills.includes(skill)
+                            ? 'bg-accent text-accent-foreground'
+                            : 'bg-secondary text-foreground hover:bg-secondary/80'
+                        }`}
+                      >
+                        {skill}
+                      </button>
+                    ))}
+                    {filteredSkillOptions.length === 0 && (
+                      <span className="text-xs text-muted-foreground">No skills match your search.</span>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </Card>
+        )}
+
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={user?.role === 'faculty' ? 'faculty-posts' : `tab-${filterTab}`}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {/* Faculty heading */}
+            {user?.role === 'faculty' && filteredPosts.length > 0 && (
+              <div className="mb-4">
+                <h2 className="text-xl font-bold text-foreground">My Posts</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">{filteredPosts.length} {filteredPosts.length === 1 ? 'post' : 'posts'}</p>
+              </div>
+            )}
+
+            {/* Posts Grid */}
+            {filteredPosts.length === 0 ? (
+              <Card className="p-12 text-center">
+                <h3 className="text-lg font-semibold text-muted-foreground mb-1">
+                  {posts.length === 0 ? 'No posts yet' : 'No posts found'}
+                </h3>
+                <p className="text-sm text-muted-foreground/70 mb-4">
+                  {posts.length === 0
+                    ? 'Be the first to create an opportunity!'
+                    : 'Try adjusting your filters or search terms'}
+                </p>
+                {posts.length === 0 && (
+                  <Button onClick={() => navigate('/create-post')} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                    <Plus size={16} className="mr-1" /> Create First Post
+                  </Button>
+                )}
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredPosts.map(post => {
+                  const owned = isMyPost(post);
+                const participantsFilled = post.requiredMembers > 0 && post.acceptedMembers >= post.requiredMembers;
+
+                return (
+                  <Card
+                      key={post.id}
+                      className={`flex flex-col hover:-translate-y-0.5 hover:border-orange-400/70 hover:shadow-[0_10px_28px_-12px_rgba(249,115,22,0.55)] transition-all duration-300 ${
+                        animatingDeletePostId === post.id ? 'opacity-0 scale-95 -translate-y-2 pointer-events-none' : 'opacity-100 scale-100'
+                      }`}
+                    >
+                      <CardContent className="p-4 pb-2 flex-1 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            {owned && (
+                              <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded bg-united-amber/15 text-united-amber border border-united-amber/30">
+                              My Post
+                            </span>
+                          )}
+                          </div>
+                          {owned && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={deletingPostId === post.id}
+                              className="ml-auto h-7 w-7 p-0 rounded-full border-destructive/40 text-destructive hover:bg-destructive/10"
+                              onClick={() => handleDeleteClick(post.id)}
+                              aria-label="Delete post"
+                              title="Delete post"
+                            >
+                              {deletingPostId === post.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                            </Button>
+                          )}
+                          {!owned && getMatchScore(post) > 0 && (
+                            <span className={`ml-auto inline-flex w-1/2 min-w-[138px] flex-col items-center justify-center px-2 py-1 text-[10px] font-bold rounded leading-tight ${
+                              getMatchScore(post) >= 65 ? 'bg-united-green/15 text-united-green' :
+                              getMatchScore(post) >= 40 ? 'bg-united-amber/15 text-united-amber' :
+                              'bg-primary/10 text-primary'
+                            }`}>
+                              <span>{getMatchScore(post)}% match</span>
+                              <span className="text-[9px] font-semibold uppercase tracking-wide">
+                                {getMatchBand(getMatchScore(post))}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-sm leading-snug text-foreground">{post.title}</h3>
+                          <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                            <span className="text-xs text-muted-foreground">by {post.author.name}</span>
+                            <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-primary/10 text-primary font-medium">
+                              {post.author.type}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="inline-block px-2 py-0.5 text-[10px] font-semibold rounded bg-united-green/10 text-united-green">
+                          {post.purpose}
+                        </span>
+                        <div className="text-xs text-muted-foreground line-clamp-2 whitespace-pre-wrap">
+                          {getDescriptionPreviewText(post.description)}
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {post.skills.slice(0, 3).map(skill => {
+                            const matchedSkills = recommendationScores[post.id]?.matchedSkills || [];
+                            const isMatched = matchedSkills.some((matchedSkill) =>
+                              matchedSkill.includes(skill.toLowerCase()) || skill.toLowerCase().includes(matchedSkill)
+                            );
+                            return (
+                              <span key={skill} className={`px-1.5 py-0.5 text-[10px] rounded ${isMatched ? 'bg-accent/20 text-accent-foreground font-semibold' : 'bg-secondary text-foreground'}`}>{skill}</span>
+                            );
+                          })}
+                          {post.skills.length > 3 && (
+                            <span className="px-1.5 py-0.5 text-[10px] rounded bg-muted text-muted-foreground">+{post.skills.length - 3}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span
+                            className={`flex items-center gap-1 ${
+                              participantsFilled ? 'font-semibold text-united-green' : ''
+                            }`}
+                          >
+                            <Users size={14} />
+                            {participantsFilled ? 'Participants Filled' : `${post.acceptedMembers}/${post.requiredMembers}`}
+                          </span>
+                          <span className="flex items-center gap-1"><Calendar size={14} /> {new Date(post.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        </div>
+                      </CardContent>
+                      <div className="px-4 pb-3 pt-1 space-y-1.5">
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            className="flex-1 text-xs rounded-full font-medium border-0 cursor-pointer shadow-[0_4px_14px_0px_rgba(37,99,235,0.4)] transition-all duration-300 bg-blue-600 text-white hover:bg-blue-700 active:translate-y-1 active:shadow-none" 
+                            onClick={() =>
+                              navigate(`/post/${post.id}`, {
+                                state: { from: 'home', activeTab: owned ? 'my' : filterTab },
+                              })
+                            }
+                          >
+                            View
+                          </Button>
+                          {participantsFilled && (
+                            <Button size="sm" variant="outline" className="flex-1 border-accent text-accent text-xs" onClick={() => navigate(`/chatroom/${post.chatroomId ?? post.id}`)}>
+                              <MessageSquare size={14} className="mr-1" /> Chat
+                            </Button>
+                          )}
+                        </div>
+                        {owned && (
+                          // Remaining slots (never negative)
+                          // We keep it dynamic so the number reflects latest accepted count.
+                          <Button
+                            size="sm"
+                            className="w-full bg-united-green hover:bg-united-green/90 text-white text-[13px] font-semibold h-auto min-h-10 py-2 px-3 leading-tight whitespace-normal text-center flex items-center justify-center gap-2 rounded-full border-0"
+                            onClick={() => navigate(`/post/${post.id}/candidates`)}
+                          >
+                            <Users size={14} className="shrink-0" />
+                            <div className="flex flex-col leading-tight">
+                              <span>🎯 View Matched Candidates</span>
+                              <span className="text-[11px] opacity-90">
+                                ({Math.max(0, (post.requiredMembers || 0) - (post.acceptedMembers || 0))} needed)
+                              </span>
+                            </div>
+                          </Button>
+                        )}
+                        {/* The above block replaces the older single-line label */}
+                        {/* Keep spacing consistent */}
+                        {/* End owned button */}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+      <AlertDialog open={!!confirmDeletePostId} onOpenChange={(open) => !open && setConfirmDeletePostId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The post and related references will be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!deletingPostId}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeletePost}
+              disabled={!!deletingPostId}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingPostId ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin" /> Deleting...
+                </span>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+export default HomePage;
+
+

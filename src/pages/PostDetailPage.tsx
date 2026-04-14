@@ -1,0 +1,661 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { fetchPostMemberCounts, isPostDeadlineReached, syncExpiredPosts } from '@/services/postAvailabilityService';
+import { getDescriptionHtmlForDisplay } from '@/lib/post-description';
+import { safeSessionStorage } from '@/lib/browser-storage';
+import {
+  ArrowLeft, Users, Calendar, Target, Award, CheckCircle, Send, UserCheck, Briefcase, UserPlus, Trash2, Edit2, Info,
+} from 'lucide-react';
+
+interface SkillRequirement {
+  skills?: string[];
+  skill?: string;
+  requiredCount: number;
+  acceptedCount?: number;
+}
+
+interface PostDetail {
+  id: string;
+  title: string;
+  description: string;
+  purpose: string;
+  status: string;
+  author_id: string;
+  skill_requirements: SkillRequirement[];
+  created_at: string;
+  deadline: string | null;
+  current_members: number;
+  max_members: number | null;
+  author: { id: string; name: string; avatar?: string; type: string };
+  applicationCount: number;
+}
+
+const matchesRequiredSkill = (userSkill: string, requiredSkill: string) => {
+  const left = userSkill.toLowerCase();
+  const right = requiredSkill.toLowerCase();
+  return left.includes(right) || right.includes(left);
+};
+
+const PostDetailPage: React.FC = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [post, setPost] = useState<PostDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [openApplyDialog, setOpenApplyDialog] = useState(false);
+  const [hasApplied, setHasApplied] = useState(false);
+  const [hasInvited, setHasInvited] = useState(false);
+  const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+  const [motivation, setMotivation] = useState('');
+  const [experience, setExperience] = useState('');
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const hasLoadedOnceRef = useRef(false);
+
+  const returnContext = (location.state as { from?: string; activeTab?: string } | null) || null;
+  const handleBack = () => {
+    if (returnContext?.from === 'home') {
+      navigate('/home', { state: { activeTab: returnContext.activeTab || 'all' } });
+      return;
+    }
+    navigate(-1);
+  };
+
+  useEffect(() => {
+    if (id && typeof window !== 'undefined') {
+      safeSessionStorage.setItem('lastViewedPostId', id);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const fetchPost = async (backgroundRefresh = false) => {
+      if (!backgroundRefresh || !hasLoadedOnceRef.current) {
+        setLoading(true);
+      }
+      await syncExpiredPosts();
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (error || !data) {
+        setLoading(false);
+        return;
+      }
+
+      // Fetch author profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, role, profile_picture_url')
+        .eq('id', data.author_id)
+        .maybeSingle();
+
+      const [
+        { count: appCount },
+        { data: acceptedApps },
+        { data: acceptedInvs },
+        chatMembersRes,
+        rpcMemberCounts,
+      ] = await Promise.all([
+        supabase
+          .from('applications')
+          .select('*', { count: 'exact', head: true })
+          .eq('post_id', id),
+        supabase
+          .from('applications')
+          .select('applicant_id')
+          .eq('post_id', id)
+          .eq('status', 'accepted'),
+        supabase
+          .from('invitations')
+          .select('invitee_id')
+          .eq('post_id', id)
+          .eq('status', 'accepted'),
+        data.chatroom_id
+          ? supabase.from('chatroom_members').select('user_id').eq('chatroom_id', data.chatroom_id)
+          : Promise.resolve({ data: [] as any[] }),
+        fetchPostMemberCounts([id]),
+      ]);
+
+      const memberSet = new Set<string>();
+      (acceptedApps || []).forEach((a: any) => memberSet.add(a.applicant_id));
+      (acceptedInvs || []).forEach((a: any) => memberSet.add(a.invitee_id));
+      (chatMembersRes.data || []).forEach((m: any) => memberSet.add(m.user_id));
+
+      const dynamicAccepted = memberSet.has(data.author_id) ? memberSet.size - 1 : memberSet.size;
+      const rpcAccepted = rpcMemberCounts.get(id) ?? 0;
+      const deadlineReached = isPostDeadlineReached(data.deadline);
+
+      // Check if current user already applied
+      if (user?.id) {
+        const [appRes, invRes] = await Promise.all([
+          supabase.from('applications').select('id').eq('post_id', id).eq('applicant_id', user.id).maybeSingle(),
+          supabase.from('invitations').select('id, status').eq('post_id', id).eq('inviter_id', user.id).eq('invitee_id', data.author_id).in('status', ['pending', 'accepted']).maybeSingle(),
+        ]);
+        setHasApplied(!!appRes.data);
+        setHasInvited(!!invRes.data);
+        setInviteStatus(invRes.data?.status || null);
+      }
+
+      const reqs = ((data.skill_requirements as unknown as SkillRequirement[]) || []).map(r => ({
+        skills: r.skills || (r.skill ? [r.skill] : []),
+        requiredCount: r.requiredCount,
+        acceptedCount: r.acceptedCount || 0,
+      }));
+
+      setPost({
+        id: data.id,
+        title: data.title,
+        description: data.description,
+        purpose: data.purpose,
+        status: deadlineReached && data.status === 'active' ? 'closed' : data.status,
+        author_id: data.author_id,
+        skill_requirements: reqs,
+        created_at: data.created_at,
+        deadline: data.deadline,
+        current_members: Math.max(0, rpcAccepted, dynamicAccepted, data.current_members ?? 0),
+        max_members: data.max_members,
+        author: {
+          id: data.author_id,
+          name: profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown',
+          avatar: profile?.profile_picture_url || undefined,
+          type: profile?.role === 'faculty' ? 'Faculty' : 'Student',
+        },
+        applicationCount: appCount || 0,
+      });
+      hasLoadedOnceRef.current = true;
+      setLoading(false);
+    };
+    void fetchPost(hasLoadedOnceRef.current);
+  }, [id, user?.id, refreshTick]);
+
+  useEffect(() => {
+    if (!id) return;
+
+    const channel = supabase
+      .channel(`post-detail-live-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'applications', filter: `post_id=eq.${id}` }, () => setRefreshTick((tick) => tick + 1))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'invitations', filter: `post_id=eq.${id}` }, () => setRefreshTick((tick) => tick + 1))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts', filter: `id=eq.${id}` }, () => setRefreshTick((tick) => tick + 1))
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+
+    const intervalId = window.setInterval(() => {
+      setRefreshTick((tick) => tick + 1);
+    }, 10000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setRefreshTick((tick) => tick + 1);
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-8 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!post) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <h2 className="text-2xl font-bold mb-4">Post not found</h2>
+        <Button variant="outline" onClick={() => navigate('/home', { state: { activeTab: 'my' } })}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> Back to Home
+        </Button>
+      </div>
+    );
+  }
+
+  const isAuthor = user?.id === post.author_id;
+  const derivedRequired = post.skill_requirements.reduce((s, r) => s + r.requiredCount, 0);
+  const derivedAccepted = post.skill_requirements.reduce((s, r) => s + (r.acceptedCount || 0), 0);
+  const totalRequired = post.max_members ?? derivedRequired;
+  const totalAccepted = post.current_members ?? derivedAccepted;
+  const progress = totalRequired > 0 ? (totalAccepted / totalRequired) * 100 : 0;
+  const participantsFilled = totalRequired > 0 && totalAccepted >= totalRequired;
+  const deadlineReached = isPostDeadlineReached(post.deadline);
+  const isUnavailable = post.status !== 'active' || deadlineReached;
+  const userSkills = user?.skills || [];
+  const bundledRequirements = post.skill_requirements
+    .map((requirement, index) => {
+      const reqSkills = requirement.skills || (requirement.skill ? [requirement.skill] : []);
+      const missingSkills = reqSkills.filter(
+        (requiredSkill) => !userSkills.some((userSkill) => matchesRequiredSkill(userSkill, requiredSkill)),
+      );
+
+      return {
+        id: `${reqSkills.join('+')}-${index}`,
+        label: reqSkills.join(' + '),
+        requiredCount: requirement.requiredCount,
+        hasMultipleSkills: reqSkills.length > 1,
+        missingSkills,
+        isFullyMatched: reqSkills.length > 0 && missingSkills.length === 0,
+      };
+    })
+    .filter((requirement) => requirement.hasMultipleSkills);
+
+  const handleInvite = async () => {
+    if (!user?.id || !id || !post) return;
+    if (isUnavailable) {
+      toast({ title: 'Post unavailable', description: 'This post is no longer accepting new activity.', variant: 'destructive' });
+      return;
+    }
+    setInviting(true);
+    try {
+      const { error } = await supabase.from('invitations').insert({
+        post_id: id,
+        inviter_id: user.id,
+        invitee_id: post.author_id,
+        status: 'pending',
+      });
+      if (error) throw error;
+
+      // Notify the post author
+      await supabase.from('notifications').insert({
+        user_id: post.author_id,
+        type: 'invitation_received',
+        title: 'New Invitation Received',
+        message: `${user?.firstName || ''} ${user?.lastName || ''} invited you to collaborate on "${post.title}"`,
+        link: '/invitations',
+        related_post_id: id,
+        related_user_id: user.id,
+      });
+
+      setHasInvited(true);
+      toast({ title: 'Invitation sent!', description: `${post.author.name} will see it in their invitations.` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const resetApplyForm = () => {
+    setMotivation('');
+    setExperience('');
+    setResumeFile(null);
+  };
+
+  const uploadApplicationResume = async (): Promise<string | null> => {
+    if (!resumeFile || !user?.id || !id) return null;
+
+    const extension = resumeFile.name.split('.').pop()?.toLowerCase() || 'pdf';
+    const baseName = resumeFile.name
+      .replace(/\.[^.]+$/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48) || 'resume';
+    const filePath = `${user.id}/applications/${id}/${Date.now()}-${baseName}.${extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('chat-files')
+      .upload(filePath, resumeFile, { upsert: false });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from('chat-files').getPublicUrl(filePath);
+
+    return publicUrl;
+  };
+
+  const handleApply = async () => {
+    if (!user?.id || !id) return;
+    if (isUnavailable) {
+      toast({ title: 'Application unavailable', description: 'This application is no longer available.', variant: 'destructive' });
+      return;
+    }
+    setSubmitting(true);
+
+    try {
+      const resumeUrl = await uploadApplicationResume();
+      const { error } = await supabase.from('applications').insert({
+        post_id: id,
+        applicant_id: user.id,
+        cover_letter: motivation.trim(),
+        answers: experience.trim() ? [{ question: 'Relevant Experience', answer: experience.trim() }] : [],
+        resume: resumeUrl,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // Notify post author about new application
+      if (post && post.author_id !== user.id) {
+        await supabase.from('notifications').insert({
+          user_id: post.author_id,
+          type: 'application_received',
+          title: 'New Application Received',
+          message: `${user?.firstName || ''} ${user?.lastName || ''} applied for "${post.title}"`,
+          link: `/applications`,
+          related_post_id: id,
+          related_user_id: user.id,
+        });
+      }
+
+      setHasApplied(true);
+      resetApplyForm();
+      setOpenApplyDialog(false);
+      toast({ title: 'Application submitted!', description: 'Your application has been sent successfully.' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to submit application', variant: 'destructive' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-4">
+      <Button variant="ghost" onClick={handleBack} className="mb-4 text-muted-foreground">
+        <ArrowLeft className="w-4 h-4 mr-2" /> Back
+      </Button>
+
+      <Card className="mb-6">
+        <CardContent className="p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <Badge variant="secondary" className="bg-united-purple/10 text-united-purple">{post.purpose}</Badge>
+                <Badge variant={post.status === 'active' ? 'default' : 'secondary'}>
+                  {post.status === 'active' ? 'Open' : post.status}
+                </Badge>
+              </div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">{post.title}</h1>
+              <div className="text-muted-foreground mb-4 whitespace-pre-wrap">
+                <div
+                  className="[&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2 [&_a]:break-all [&_li]:mb-1 [&_p]:mb-3 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-5"
+                  dangerouslySetInnerHTML={{ __html: getDescriptionHtmlForDisplay(post.description) }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Author */}
+          <div className="flex items-center justify-between mb-4 p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center gap-3">
+              <Avatar>
+                <AvatarImage src={post.author.avatar} />
+                <AvatarFallback className="bg-united-purple text-white">{post.author.name[0]}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-semibold text-sm">{post.author.name}</p>
+                <p className="text-xs text-muted-foreground capitalize">{post.author.type}</p>
+              </div>
+            </div>
+            {!isAuthor && !isUnavailable && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleInvite}
+                disabled={hasInvited || inviting}
+                className="border-united-purple/40 text-united-purple hover:bg-united-purple/10"
+              >
+                <UserPlus className="w-4 h-4 mr-1" />
+                {hasInvited ? 'Invited' : inviting ? 'Sending...' : 'Invite'}
+              </Button>
+            )}
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Calendar className="w-4 h-4" />
+              <span>{new Date(post.created_at).toLocaleDateString()}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Calendar className="w-4 h-4" />
+              <span>{post.deadline ? `Available through ${new Date(post.deadline).toLocaleDateString()}` : 'No expiry date'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Users className="w-4 h-4" />
+              <span className={participantsFilled ? 'font-semibold text-united-green' : undefined}>
+                {participantsFilled ? 'Participants Filled' : `${totalAccepted}/${totalRequired} members`}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Briefcase className="w-4 h-4" />
+              <span>{post.applicationCount} applications</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Target className="w-4 h-4" />
+              <span>{post.skill_requirements.length} skills needed</span>
+            </div>
+          </div>
+
+          {/* Progress */}
+          <div className="mb-4">
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-muted-foreground">Team Progress</span>
+              <span className="font-semibold">{Math.round(progress)}%</span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+
+          <Separator className="my-4" />
+
+          {/* Skills */}
+          <div className="mb-4">
+            <h3 className="font-semibold mb-2 flex items-center gap-2"><Award className="w-4 h-4" /> Required Skills</h3>
+            <div className="flex flex-wrap gap-2">
+              {post.skill_requirements.map((sr, idx) => {
+                const reqSkills = sr.skills || (sr.skill ? [sr.skill] : []);
+                const label = reqSkills.join(' + ');
+                return (
+                <Badge key={`${label}-${idx}`} variant="outline" className="bg-primary/5 border-primary/20 text-primary">
+                  {label} ({sr.acceptedCount || 0}/{sr.requiredCount})
+                </Badge>
+                );
+              })}
+            </div>
+            {bundledRequirements.length > 0 && (
+              <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                <p className="font-semibold text-primary">Bundled skill requirement</p>
+                <p className="mt-1 text-muted-foreground">
+                  This post needs one candidate who has all the skills in each bundle, not separate candidates for each skill.
+                </p>
+                <div className="mt-2 space-y-2">
+                  {bundledRequirements.map((requirement) => (
+                    <div key={requirement.id} className="rounded-md border border-primary/10 bg-background/80 p-2">
+                      <p className="font-medium text-foreground">
+                        {requirement.label} ({requirement.requiredCount} candidate{requirement.requiredCount > 1 ? 's' : ''})
+                      </p>
+                      {!isAuthor && user?.role !== 'faculty' && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {requirement.isFullyMatched
+                            ? 'Your profile currently matches this full skill bundle.'
+                            : `Your profile is currently missing: ${requirement.missingSkills.join(', ')}`}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-3 pt-4">
+          {isAuthor ? (
+              <>
+                <Button onClick={() => navigate(`/post/manage/${post.id}`)} className="bg-united-purple hover:bg-united-purple/90">
+                  <Users className="w-4 h-4 mr-2" /> Manage Applicants
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/edit-post/${post.id}`)}
+                  className="border-united-purple/40 text-united-purple hover:bg-united-purple/10"
+                >
+                  <Edit2 className="w-4 h-4 mr-2" /> Edit Post
+                </Button>
+                <Button variant="outline" onClick={() => navigate(`/post/${post.id}/candidates`)}>
+                  <UserCheck className="w-4 h-4 mr-2" /> View Candidates
+                </Button>
+                <Button variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => setDeleteDialogOpen(true)}>
+                  <Trash2 className="w-4 h-4 mr-2" /> Delete
+                </Button>
+              </>
+            ) : user?.role !== 'faculty' ? (
+              <Button
+                onClick={() => {
+                  if (isUnavailable) {
+                    toast({ title: 'Application unavailable', description: 'This application is no longer available.', variant: 'destructive' });
+                    return;
+                  }
+                  setOpenApplyDialog(true);
+                }}
+                disabled={hasApplied}
+              >
+                {hasApplied ? (
+                  <><CheckCircle className="w-4 h-4 mr-2" /> Applied</>
+                ) : isUnavailable ? (
+                  <>This application is no longer available</>
+                ) : (
+                  <><Send className="w-4 h-4 mr-2" /> Apply Now</>
+                )}
+              </Button>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Delete Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="bg-card text-foreground border border-border shadow-2xl">
+          <DialogHeader><DialogTitle>Delete Post?</DialogTitle></DialogHeader>
+          <p className="text-muted-foreground">Are you sure you want to delete this post? This action cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={async () => {
+              setDeleting(true);
+              const { error } = await supabase.from('posts').delete().eq('id', post.id);
+              setDeleting(false);
+              if (error) {
+                toast({ title: 'Error', description: error.message, variant: 'destructive' });
+                return;
+              }
+              toast({ title: 'Post deleted' });
+              navigate('/home', { state: { activeTab: 'my' } });
+            }} disabled={deleting}>
+              {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Apply Dialog */}
+      <Dialog open={openApplyDialog} onOpenChange={setOpenApplyDialog}>
+        <DialogContent className="max-w-lg bg-card text-foreground border border-border shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-white">Apply for {post.title}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {bundledRequirements.length > 0 && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <p className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Info className="h-4 w-4" /> This post has bundled skill requirements
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  One candidate is expected to have all the skills listed together in a bundle.
+                </p>
+                <div className="mt-2 space-y-2">
+                  {bundledRequirements.map((requirement) => (
+                    <div key={`apply-${requirement.id}`} className="rounded-md border border-primary/10 bg-background/80 p-2">
+                      <p className="text-sm font-medium text-foreground">
+                        {requirement.label} ({requirement.requiredCount} candidate{requirement.requiredCount > 1 ? 's' : ''})
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {requirement.isFullyMatched
+                          ? 'Your current profile matches this requirement.'
+                          : `Your current profile is missing: ${requirement.missingSkills.join(', ')}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div>
+              <Label>Why are you interested? *</Label>
+              <Textarea value={motivation} onChange={e => setMotivation(e.target.value)} placeholder="Share your motivation..." className="mt-1" />
+            </div>
+            <div>
+              <Label>Relevant Experience</Label>
+              <Textarea value={experience} onChange={e => setExperience(e.target.value)} placeholder="Describe your relevant experience..." className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="application-resume">Resume</Label>
+              <Input
+                id="application-resume"
+                type="file"
+                accept=".pdf,.doc,.docx"
+                className="mt-1"
+                onChange={(event) => setResumeFile(event.target.files?.[0] || null)}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Upload PDF, DOC, or DOCX. This will be visible to the post owner during review.
+              </p>
+              {resumeFile && (
+                <p className="mt-1 text-xs font-medium text-foreground">
+                  Selected: {resumeFile.name}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenApplyDialog(false)}>Cancel</Button>
+            <Button onClick={handleApply} disabled={!motivation.trim() || submitting}>
+              {submitting ? 'Submitting...' : 'Submit Application'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default PostDetailPage;

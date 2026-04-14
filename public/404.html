@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redirecting...</title>
+  <script>
+    (function () {
+      var targetPath = window.location.pathname + window.location.search + window.location.hash;
+      try {
+        window.sessionStorage.setItem("spa-fallback-path", targetPath);
+      } catch (error) {
+        console.warn("Could not persist SPA fallback path", error);
+      }
+      window.location.replace("/?spa-fallback=1");
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0b1220;
+      --card: #0f172a;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #6c47ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+    }
+
+    .card {
+      max-width: 480px;
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      background: var(--card);
+      padding: 28px 32px;
+      text-align: center;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+    }
+
+    p {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    a {
+      display: inline-block;
+      border-radius: 10px;
+      background: var(--accent);
+      padding: 12px 18px;
+      color: #fff;
+      font-weight: 600;
+      text-decoration: none;
+      box-shadow: 0 8px 20px rgba(108, 71, 255, 0.35);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Redirecting to the app</h1>
+    <p>If you are not redirected automatically, use the button below to open the site root.</p>
+    <a href="/">Open Home</a>
+  </div>
+</body>
+</html>

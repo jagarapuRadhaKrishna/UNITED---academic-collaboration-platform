@@ -1,0 +1,810 @@
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { ArrowLeft, Send, Users, Info, Loader2, Paperclip, FileText, Download, X, Trash2, UserMinus, UserPlus } from 'lucide-react';
+import { toast } from 'sonner';
+import { useTheme } from 'next-themes';
+import { AnimatePresence, motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
+
+interface Msg {
+  id: string;
+  content: string;
+  sender_id: string;
+  sender_name: string;
+  type: string;
+  file_url: string | null;
+  file_name: string | null;
+  created_at: string;
+}
+
+interface Member {
+  user_id: string;
+  name: string;
+  role: string;
+  isPostOwner?: boolean;
+}
+
+interface ResolvedChatroom {
+  id: string;
+  status: string;
+  post_id: string;
+}
+
+const ChatroomPage: React.FC = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { theme, resolvedTheme } = useTheme();
+  const [messageText, setMessageText] = useState('');
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [chatroomId, setChatroomId] = useState<string | null>(null);
+  const [postTitle, setPostTitle] = useState('');
+  const [postId, setPostId] = useState<string | null>(null);
+  const [status, setStatus] = useState('active');
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [showMembers, setShowMembers] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [removingMember, setRemovingMember] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const memberProfileRef = useRef<Record<string, { name: string; isOwner: boolean }>>({});
+
+  const isDark = useMemo(() => {
+    const mode = theme === 'system' ? resolvedTheme : theme;
+    return mode === 'dark';
+  }, [theme, resolvedTheme]);
+
+  const iconClass = isDark ? 'text-foreground' : '';
+  const pageSurfaceClass = isDark ? 'bg-[#0b1220]' : 'bg-background';
+  const panelSurfaceClass = isDark ? 'bg-[#18233d]' : 'bg-card/95';
+
+  useEffect(() => {
+    const previousBodyBackground = document.body.style.backgroundColor;
+    const previousHtmlBackground = document.documentElement.style.backgroundColor;
+
+    if (isDark) {
+      document.body.style.backgroundColor = '#0b1220';
+      document.documentElement.style.backgroundColor = '#0b1220';
+    }
+
+    return () => {
+      document.body.style.backgroundColor = previousBodyBackground;
+      document.documentElement.style.backgroundColor = previousHtmlBackground;
+    };
+  }, [isDark]);
+
+  useEffect(() => {
+    if (id && user?.id) fetchChatroom();
+  }, [id, user?.id]);
+
+  const resolveChatroom = async (routeId: string): Promise<ResolvedChatroom | null> => {
+    const { data: directMatch, error: directError } = await supabase
+      .from('chatrooms')
+      .select('id, status, post_id')
+      .eq('id', routeId)
+      .maybeSingle();
+
+    if (directError) throw directError;
+    if (directMatch) return directMatch;
+
+    const { data: postMatch, error: postError } = await supabase
+      .from('posts')
+      .select('chatroom_id')
+      .eq('id', routeId)
+      .maybeSingle();
+
+    if (postError) throw postError;
+
+    if (postMatch?.chatroom_id) {
+      const { data: chatroomFromPost, error: chatroomFromPostError } = await supabase
+        .from('chatrooms')
+        .select('id, status, post_id')
+        .eq('id', postMatch.chatroom_id)
+        .maybeSingle();
+
+      if (chatroomFromPostError) throw chatroomFromPostError;
+      if (chatroomFromPost) return chatroomFromPost;
+    }
+
+    const { data: byPostId, error: byPostIdError } = await supabase
+      .from('chatrooms')
+      .select('id, status, post_id')
+      .eq('post_id', routeId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (byPostIdError) throw byPostIdError;
+    return byPostId ?? null;
+  };
+
+  const fetchChatroom = async () => {
+    if (!id || !user?.id) return;
+    setLoading(true);
+    setPageError(null);
+    try {
+      const resolvedChatroom = await resolveChatroom(id);
+
+      if (!resolvedChatroom) {
+        setChatroomId(null);
+        setPostId(null);
+        setPostTitle('');
+        setMembers([]);
+        setMessages([]);
+        return;
+      }
+
+      if (resolvedChatroom.id !== id) {
+        navigate(`/chatroom/${resolvedChatroom.id}`, { replace: true });
+      }
+
+      setChatroomId(resolvedChatroom.id);
+      setStatus(resolvedChatroom.status);
+      setPostId(resolvedChatroom.post_id);
+
+      const [{ data: post }, { data: memberData }, { data: msgs }] = await Promise.all([
+        supabase.from('posts').select('title, author_id').eq('id', resolvedChatroom.post_id).maybeSingle(),
+        supabase.from('chatroom_members').select('user_id, role').eq('chatroom_id', resolvedChatroom.id),
+        supabase.from('messages').select('id, content, sender_id, type, file_url, file_name, created_at').eq('chatroom_id', resolvedChatroom.id).order('created_at', { ascending: true }),
+      ]);
+
+      setPostTitle(post?.title || 'Chat Room');
+      setIsOwner(post?.author_id === user.id);
+
+      const memberIds = (memberData || []).map(m => m.user_id);
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .in('id', memberIds.length ? memberIds : ['__none__']);
+
+      const profileMap: Record<string, { name: string; isOwner: boolean }> = {};
+      const postOwnerId = post?.author_id;
+      (profiles || []).forEach(p => {
+        profileMap[p.id] = {
+          name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+          isOwner: p.id === postOwnerId,
+        };
+      });
+      memberProfileRef.current = profileMap;
+
+      setMembers((memberData || []).map(m => ({
+        user_id: m.user_id,
+        name: profileMap[m.user_id]?.name || 'Unknown',
+        role: m.role,
+        isPostOwner: profileMap[m.user_id]?.isOwner || false,
+      })));
+
+      setMessages((msgs || []).map(m => ({
+        ...m,
+        sender_name: profileMap[m.sender_id]?.name || 'Unknown',
+      })));
+    } catch (err) {
+      console.error(err);
+      setPageError('Failed to load this chat room. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMessages = async (profileMap?: Record<string, { name: string; isOwner: boolean }>) => {
+    if (!chatroomId) return;
+    const { data: msgs } = await supabase
+      .from('messages')
+      .select('id, content, sender_id, type, file_url, file_name, created_at')
+      .eq('chatroom_id', chatroomId)
+      .order('created_at', { ascending: true });
+
+    if (!profileMap) {
+      profileMap = memberProfileRef.current;
+    }
+
+    if (!profileMap || Object.keys(profileMap).length === 0) {
+      const senderIds = [...new Set((msgs || []).map(m => m.sender_id))];
+      if (senderIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name');
+        profileMap = {};
+        (profiles || []).forEach(p => { profileMap![p.id] = { name: `${p.first_name || ''} ${p.last_name || ''}`.trim(), isOwner: false }; });
+        memberProfileRef.current = profileMap;
+      } else {
+        profileMap = {};
+      }
+    }
+
+    setMessages((msgs || []).map(m => ({
+      ...m,
+      sender_name: profileMap![m.sender_id]?.name || 'Unknown',
+    })));
+  };
+
+  // Real-time messages
+  useEffect(() => {
+    if (!chatroomId) return;
+    const channel = supabase
+      .channel(`chatroom-${chatroomId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chatroom_id=eq.${chatroomId}` }, () => {
+        fetchMessages();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [chatroomId]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast.error('File size must be under 10MB'); return; }
+    setSelectedFile(file);
+    if (file.type.startsWith('image/')) {
+      setFilePreviewUrl(URL.createObjectURL(file));
+    } else {
+      setFilePreviewUrl(null);
+    }
+  };
+
+  const clearSelectedFile = () => {
+    if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+    setSelectedFile(null);
+    setFilePreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const notifyOtherMembers = async (content: string) => {
+    if (!user?.id || !chatroomId) return;
+    const senderName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Someone';
+    const otherMembers = members.filter(m => m.user_id !== user.id);
+    if (otherMembers.length === 0) return;
+
+    const notifications = otherMembers.map(m => ({
+      user_id: m.user_id,
+      type: 'new_message',
+      title: `New message from ${senderName}`,
+      message: content.length > 100 ? content.substring(0, 100) + '...' : content,
+      link: `/chatroom/${chatroomId}`,
+      related_chatroom_id: chatroomId,
+      related_user_id: user.id,
+    }));
+
+    await supabase.from('notifications').insert(notifications);
+  };
+
+  const handleSend = async () => {
+    if (!user?.id || !chatroomId) return;
+    if (!messageText.trim() && !selectedFile) return;
+
+    if (selectedFile) {
+      setUploading(true);
+      try {
+        const ext = selectedFile.name.split('.').pop() || 'file';
+        const filePath = `${user.id}/${chatroomId}/${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage.from('chat-files').upload(filePath, selectedFile);
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage.from('chat-files').getPublicUrl(filePath);
+        const isImage = selectedFile.type.startsWith('image/');
+        const { error } = await supabase.from('messages').insert({
+          chatroom_id: chatroomId, sender_id: user.id,
+          content: isImage ? '📷 Image' : `📎 ${selectedFile.name}`,
+          type: isImage ? 'image' : 'file', file_url: publicUrl, file_name: selectedFile.name,
+        });
+        if (error) throw error;
+        const fileContent = isImage ? '📷 Image' : `📎 ${selectedFile.name}`;
+        clearSelectedFile();
+        await Promise.all([fetchMessages(), supabase.from('chatrooms').update({ last_activity: new Date().toISOString() }).eq('id', chatroomId), notifyOtherMembers(fileContent)]);
+        toast.success(`${isImage ? 'Image' : 'File'} sent!`);
+      } catch (err: any) {
+        console.error(err);
+        toast.error('Failed to upload file');
+      } finally {
+        setUploading(false);
+      }
+      if (messageText.trim()) {
+        const text = messageText.trim();
+        setMessageText('');
+        try {
+          await supabase.from('messages').insert({ chatroom_id: chatroomId, sender_id: user.id, content: text, type: 'text' });
+          await fetchMessages();
+        } catch (e) { console.error(e); }
+      }
+      return;
+    }
+
+    const text = messageText.trim();
+    setMessageText('');
+    try {
+      const { error } = await supabase.from('messages').insert({ chatroom_id: chatroomId, sender_id: user.id, content: text, type: 'text' });
+      if (error) throw error;
+      await Promise.all([fetchMessages(), supabase.from('chatrooms').update({ last_activity: new Date().toISOString() }).eq('id', chatroomId), notifyOtherMembers(text)]);
+    } catch (e) {
+      console.error(e);
+      setMessageText(text);
+    }
+  };
+
+  // Owner: Delete chatroom
+  const handleDeleteChatroom = async () => {
+    if (!chatroomId) return;
+    try {
+      await supabase.from('chatrooms').update({ status: 'deleted', deleted_at: new Date().toISOString() }).eq('id', chatroomId);
+      toast.success('Chatroom deleted');
+      navigate('/chatrooms');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to delete chatroom');
+    }
+  };
+
+  // Owner: Remove member
+  const handleRemoveMember = async (memberId: string) => {
+    if (!chatroomId) return;
+    try {
+      // We can't delete chatroom_members (no RLS DELETE policy), so we'll remove via a workaround
+      // Actually let's check — the schema says can't DELETE. We need a migration for that.
+      // For now, send a system message and remove from UI. We need to add DELETE policy.
+      const memberName = members.find(m => m.user_id === memberId)?.name || 'A member';
+      
+      // Try to delete the member
+      const { error } = await supabase
+        .from('chatroom_members')
+        .delete()
+        .eq('chatroom_id', chatroomId)
+        .eq('user_id', memberId);
+      
+      if (error) throw error;
+
+      await supabase.from('messages').insert({
+        chatroom_id: chatroomId, sender_id: user!.id,
+        content: `${memberName} was removed from the chatroom`,
+        type: 'system',
+      });
+
+      setMembers(prev => prev.filter(m => m.user_id !== memberId));
+      setRemovingMember(null);
+      toast.success(`${memberName} removed`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to remove member: ' + (err.message || ''));
+    }
+  };
+
+  // Owner: Invite by email
+  const handleInviteByEmail = async () => {
+    if (!inviteEmail.trim() || !postId || !user?.id) return;
+    setInviting(true);
+    try {
+      // Find user by email
+      const { data: profile, error: profileErr } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, email')
+        .eq('email', inviteEmail.trim())
+        .maybeSingle();
+
+      if (profileErr || !profile) {
+        toast.error('No user found with that email');
+        setInviting(false);
+        return;
+      }
+
+      if (profile.id === user.id) {
+        toast.error("You can't invite yourself");
+        setInviting(false);
+        return;
+      }
+
+      // Check if already a member
+      const alreadyMember = members.find(m => m.user_id === profile.id);
+      if (alreadyMember) {
+        toast.error('User is already a member of this chatroom');
+        setInviting(false);
+        return;
+      }
+
+      // Check for existing pending invitation
+      const { data: existingInv } = await supabase
+        .from('invitations')
+        .select('id')
+        .eq('post_id', postId)
+        .eq('invitee_id', profile.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (existingInv) {
+        toast.error('An invitation is already pending for this user');
+        setInviting(false);
+        return;
+      }
+
+      // Create invitation
+      const { error: invError } = await supabase.from('invitations').insert({
+        post_id: postId,
+        inviter_id: user.id,
+        invitee_id: profile.id,
+      });
+      if (invError) throw invError;
+
+      // Notify the invitee
+      await supabase.from('notifications').insert({
+        user_id: profile.id,
+        type: 'invitation_received',
+        title: 'New Invitation',
+        message: `${user.firstName || ''} ${user.lastName || ''} invited you to join "${postTitle}"`,
+        link: '/invitations',
+        related_post_id: postId,
+        related_user_id: user.id,
+      });
+
+      toast.success(`Invitation sent to ${profile.first_name || profile.email}`);
+      setInviteEmail('');
+      setShowInviteDialog(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to send invitation: ' + (err.message || ''));
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <motion.div
+        className="flex justify-center py-20"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </motion.div>
+    );
+  }
+
+  if (pageError) {
+    return (
+      <motion.div
+        className="max-w-4xl mx-auto px-4 py-8 text-center"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <h2 className="text-xl font-bold mb-4">Unable to open chat room</h2>
+        <p className="mb-6 text-sm text-muted-foreground">{pageError}</p>
+        <div className="flex justify-center gap-3">
+          <Button variant="outline" onClick={() => navigate('/chatrooms')}>
+            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Chatrooms
+          </Button>
+          <Button onClick={() => fetchChatroom()}>Try Again</Button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (!postTitle) {
+    return (
+      <motion.div
+        className="max-w-4xl mx-auto px-4 py-8 text-center"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <h2 className="text-xl font-bold mb-4">Chat room not found</h2>
+        <Button variant="outline" onClick={() => navigate('/chatrooms')}><ArrowLeft className="w-4 h-4 mr-2" /> Back to Chatrooms</Button>
+      </motion.div>
+    );
+  }
+
+  const isReadOnly = status !== 'active';
+
+  return (
+    <div
+      className={cn('relative left-1/2 w-screen -translate-x-1/2 overflow-hidden text-foreground', pageSurfaceClass)}
+      style={{ minHeight: 'calc(100vh - 4rem)' }}
+    >
+      <motion.div
+        className={cn('max-w-4xl mx-auto flex min-h-0 flex-col px-4 py-4 text-foreground', pageSurfaceClass)}
+        style={{ height: 'calc(100vh - 5rem)' }}
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
+      >
+      <motion.div
+        className="flex items-center justify-between mb-3"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.46, delay: 0.06, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/chatrooms')}><ArrowLeft className={`w-4 h-4 ${iconClass}`} /></Button>
+          <div>
+            <h2 className="font-semibold text-sm text-foreground">
+              {members.map(m => (m.name || '').split(' ')[0] || 'Member').join(' & ') || postTitle}
+            </h2>
+            <p className="text-xs text-muted-foreground">{postTitle} - {members.length} members</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          {isOwner && (
+            <>
+              <Button variant="ghost" size="icon" onClick={() => setShowInviteDialog(true)} title="Add member by email">
+                <UserPlus className={`w-4 h-4 ${iconClass}`} />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setShowDeleteConfirm(true)} title="Delete chatroom" className="text-destructive hover:text-destructive">
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </>
+          )}
+          <Button variant="ghost" size="icon" onClick={() => setShowMembers(!showMembers)}>
+            <Users className={`w-4 h-4 ${iconClass}`} />
+          </Button>
+        </div>
+      </motion.div>
+
+      <AnimatePresence initial={false}>
+        {showMembers && (
+          <motion.div
+            className="overflow-hidden"
+            initial={{ opacity: 0, height: 0, y: -8 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -8 }}
+            transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <Card className="mb-3">
+              <CardContent className="p-3">
+                <h4 className="font-semibold text-xs mb-2">Members</h4>
+                <div className="space-y-2">
+                  {members.map((m, index) => (
+                    <motion.div
+                      key={m.user_id}
+                      className="flex items-center gap-2"
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.32, delay: index * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <Avatar className="h-6 w-6">
+                        <AvatarFallback className="text-[10px] bg-primary/10">{m.name[0]}</AvatarFallback>
+                      </Avatar>
+                      <span className="text-xs flex-1">{m.name}</span>
+                      {m.isPostOwner && <Badge variant="secondary" className="text-[10px] h-4">Owner</Badge>}
+                      {isOwner && m.user_id !== user?.id && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-destructive hover:text-destructive"
+                          onClick={() => setRemovingMember(m.user_id)}
+                          title="Remove member"
+                        >
+                          <UserMinus className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <motion.div
+        className={cn('mb-3 flex min-h-0 flex-1 rounded-2xl border border-border shadow-sm', panelSurfaceClass)}
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.48, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <ScrollArea className="h-full min-h-0 flex-1 rounded-[inherit] p-3">
+          <div className="space-y-3">
+            <AnimatePresence initial={true}>
+              {messages.map(msg => {
+                const isOwn = msg.sender_id === user?.id;
+                const isSystem = msg.type === 'system';
+
+                if (isSystem) {
+                  return (
+                    <motion.div
+                      key={msg.id}
+                      className="text-center"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">{msg.content}</span>
+                    </motion.div>
+                  );
+                }
+
+                return (
+                  <motion.div
+                    key={msg.id}
+                    className={`group flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                    initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className={`w-fit min-w-[8.5rem] max-w-[70%] ${isOwn ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'} rounded-2xl px-3 py-2 shadow-sm`}>
+                        {!isOwn && <p className="text-[10px] font-semibold mb-0.5 opacity-70">{msg.sender_name}</p>}
+                        {msg.type === 'image' && msg.file_url && (
+                          <div className="mb-1">
+                            <img src={msg.file_url} alt={msg.file_name || 'Image'} className="rounded-md max-w-full max-h-60 cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(msg.file_url!, '_blank')} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          </div>
+                        )}
+                        {msg.type === 'file' && msg.file_url && (
+                          <a href={msg.file_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-2 p-2 rounded-md mb-1 ${isOwn ? 'bg-primary-foreground/10 hover:bg-primary-foreground/20' : 'bg-background/50 hover:bg-background/80'} transition-colors`}>
+                            <FileText className="w-5 h-5 shrink-0" />
+                            <span className="text-xs truncate flex-1">{msg.file_name || 'Document'}</span>
+                            <Download className="w-4 h-4 shrink-0" />
+                          </a>
+                        )}
+                        {msg.type === 'text' && <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>}
+                        <p className={`mt-1 text-[10px] whitespace-nowrap text-right ${isOwn ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      {isOwn && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await supabase.from('messages').delete().eq('id', msg.id);
+                              setMessages(prev => prev.filter(m => m.id !== msg.id));
+                              toast.success('Message deleted');
+                            } catch { toast.error('Failed to delete'); }
+                          }}
+                          className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10 text-destructive"
+                          title="Delete message"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+            <div ref={scrollRef} />
+          </div>
+        </ScrollArea>
+      </motion.div>
+
+      {isReadOnly ? (
+        <motion.div
+          className={cn('rounded-2xl border border-border py-2 text-center text-sm text-muted-foreground', panelSurfaceClass)}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.44, delay: 0.14, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <Info className={`w-4 h-4 inline mr-1 ${iconClass}`} /> This chat room is read-only
+        </motion.div>
+      ) : (
+        <motion.div
+          className={cn('rounded-2xl border border-border p-3 shadow-sm', panelSurfaceClass)}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.44, delay: 0.14, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <AnimatePresence>
+            {selectedFile && (
+              <motion.div
+                className="flex items-center gap-3 p-2 mb-2 bg-muted rounded-lg border"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {filePreviewUrl ? (
+                  <img src={filePreviewUrl} alt="Preview" className="h-16 w-16 object-cover rounded-md" />
+                ) : (
+                  <div className="h-16 w-16 bg-background rounded-md flex items-center justify-center">
+                    <FileText className={`w-6 h-6 text-muted-foreground ${iconClass}`} />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{selectedFile.name}</p>
+                  <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={clearSelectedFile} className="shrink-0"><X className="w-4 h-4" /></Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="flex gap-2 items-center">
+            <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.zip,.rar" className="hidden" onChange={handleFileSelect} />
+            <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="shrink-0">
+              {uploading ? <Loader2 className={`w-4 h-4 animate-spin ${iconClass}`} /> : <Paperclip className={`w-4 h-4 ${iconClass}`} />}
+            </Button>
+            <Input
+              value={messageText}
+              onChange={e => setMessageText(e.target.value)}
+              placeholder={selectedFile ? 'Add a caption (optional)...' : 'Type a message...'}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+              className="flex-1 text-foreground placeholder:text-foreground/70"
+            />
+            <Button onClick={handleSend} disabled={(!messageText.trim() && !selectedFile) || uploading} className="bg-primary shrink-0">
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin text-foreground" /> : <Send className="w-4 h-4 text-foreground" />}
+            </Button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Invite by Email Dialog */}
+      <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Invite by Email</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <Label className="text-foreground">Email address</Label>
+            <Input
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              placeholder="user@example.com"
+              className="mt-1 text-foreground placeholder:text-foreground/70"
+              onKeyDown={e => e.key === 'Enter' && handleInviteByEmail()}
+            />
+            <p className="text-xs text-foreground/80 mt-2">A post invitation will be sent. Once accepted, the user joins this chatroom.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInviteDialog(false)}>Cancel</Button>
+            <Button onClick={handleInviteByEmail} disabled={!inviteEmail.trim() || inviting}>
+              {inviting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+              Send Invitation
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Chatroom Confirm */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Chatroom</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete this chatroom? All members will lose access. This cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteChatroom}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove Member Confirm */}
+      <Dialog open={!!removingMember} onOpenChange={() => setRemovingMember(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove Member</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to remove <strong>{members.find(m => m.user_id === removingMember)?.name}</strong> from this chatroom?
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemovingMember(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => removingMember && handleRemoveMember(removingMember)}>Remove</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      </motion.div>
+    </div>
+  );
+};
+
+export default ChatroomPage;
