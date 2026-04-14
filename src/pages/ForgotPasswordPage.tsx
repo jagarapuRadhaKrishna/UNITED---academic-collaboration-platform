@@ -97,12 +97,10 @@ const ForgotPasswordPage: React.FC = () => {
         <div style={{ position: 'absolute', top: -80, right: -80, width: 340, height: 340, borderRadius: '50%', background: 'rgba(96,165,250,0.1)', filter: 'blur(50px)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', bottom: -80, left: -80, width: 280, height: 280, borderRadius: '50%', background: 'rgba(99,102,241,0.12)', filter: 'blur(50px)', pointerEvents: 'none' }} />
         <motion.div className="relative z-10 text-center" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6 }}>
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)' }}>
-            <img src="/favicon.svg" alt="UnitEd" style={{ width: '60%', height: '60%', objectFit: 'contain' }} />
-          </div>
+          <img src="/favicon.svg" alt="UnitEd" className="mx-auto mb-4" style={{ width: 100, height: 100, objectFit: 'contain' }} />
           <h2 className="text-4xl font-extrabold text-white mb-2 tracking-tight">UnitEd</h2>
-          <p className="text-blue-200 text-base leading-relaxed max-w-xs mx-auto">
-            Connecting students &amp; faculty in one unified workspace.
+          <p className="text-white/70 text-sm font-bold tracking-widest mx-auto whitespace-nowrap">
+            UNITE &nbsp;·&nbsp; <span className="text-orange-400">COLLABORATE</span> &nbsp;·&nbsp; ACHIEVE
           </p>
         </motion.div>
       </div>

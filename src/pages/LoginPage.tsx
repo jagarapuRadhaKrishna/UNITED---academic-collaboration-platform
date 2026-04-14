@@ -85,14 +85,14 @@ const LoginPage: React.FC = () => {
           <Box sx={{ position: 'absolute', bottom: -80, left: -80, width: 280, height: 280, borderRadius: '50%', background: 'rgba(99,102,241,0.12)', filter: 'blur(50px)' }} />
           <Box sx={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
             <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.6 }}>
-              <Box sx={{ width: 76, height: 76, borderRadius: '20px', background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 3 }}>
-                <img src="/favicon.svg" alt="UnitEd" style={{ width: '60%', height: '60%', objectFit: 'contain' }} />
+              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+                <img src="/favicon.svg" alt="UnitEd" style={{ width: 100, height: 100, objectFit: 'contain' }} />
               </Box>
               <Typography variant="h3" sx={{ fontWeight: 800, color: '#fff', mb: 1.5, letterSpacing: '-0.03em' }}>
                 UnitEd
               </Typography>
-              <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontSize: '1rem', maxWidth: 260, mx: 'auto', lineHeight: 1.7 }}>
-                Connecting students &amp; faculty in one unified workspace.
+              <Typography sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.95rem', mx: 'auto', letterSpacing: '0.08em', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                UNITE &nbsp;·&nbsp; <span style={{ color: '#f97316' }}>COLLABORATE</span> &nbsp;·&nbsp; ACHIEVE
               </Typography>
             </motion.div>
           </Box>
