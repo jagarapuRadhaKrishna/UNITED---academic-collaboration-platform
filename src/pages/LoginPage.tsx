@@ -181,7 +181,21 @@ const LoginPage: React.FC = () => {
                 </Box>
 
                 <Box sx={{ mb: 3, textAlign: 'right' }}>
-                  <Button component={Link} to="/forgot-password" sx={{ color: '#2563eb', textTransform: 'none', fontSize: '0.875rem', p: 0, minWidth: 'auto', '&:hover': { backgroundColor: 'transparent', textDecoration: 'underline' } }}>
+                  <Button
+                    component={Link}
+                    to="/forgot-password"
+                    sx={{
+                      color: '#2563eb',
+                      textTransform: 'none',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      p: '2px 8px',
+                      minWidth: 'auto',
+                      borderRadius: '6px',
+                      transition: 'all 0.18s',
+                      '&:hover': { backgroundColor: '#eff6ff', color: '#1d4ed8' },
+                    }}
+                  >
                     Forgot Password?
                   </Button>
                 </Box>
@@ -211,7 +225,23 @@ const LoginPage: React.FC = () => {
                 <Box sx={{ textAlign: 'center', mt: 2 }}>
                   <Typography variant="body2" sx={{ color: '#64748b' }}>
                     Don't have an account?{' '}
-                    <Button component={Link} to="/register" sx={{ color: '#2563eb', fontWeight: 700, textTransform: 'none', p: 0, minWidth: 'auto', '&:hover': { backgroundColor: 'transparent', textDecoration: 'underline' } }}>
+                    <Button
+                      component={Link}
+                      to="/register"
+                      sx={{
+                        color: '#fff',
+                        fontWeight: 700,
+                        textTransform: 'none',
+                        fontSize: '0.82rem',
+                        px: 1.5, py: 0.4,
+                        minWidth: 'auto',
+                        borderRadius: '6px',
+                        background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
+                        boxShadow: '0 2px 8px rgba(37,99,235,0.25)',
+                        transition: 'all 0.18s',
+                        '&:hover': { background: 'linear-gradient(135deg, #1e40af, #1d4ed8)', boxShadow: '0 4px 12px rgba(37,99,235,0.35)' },
+                      }}
+                    >
                       Register here
                     </Button>
                   </Typography>
@@ -221,7 +251,23 @@ const LoginPage: React.FC = () => {
           </Box>
 
           <Box sx={{ mt: 5, textAlign: 'center' }}>
-            <Button component={Link} to="/landing" sx={{ color: '#94a3b8', textTransform: 'none', fontSize: '0.8rem', '&:hover': { backgroundColor: 'transparent', color: '#64748b' } }}>
+            <Button
+              component={Link}
+              to="/landing"
+              sx={{
+                color: '#fff',
+                fontWeight: 700,
+                textTransform: 'none',
+                fontSize: '0.82rem',
+                px: 2, py: 0.8,
+                minWidth: 'auto',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #ea580c, #f97316)',
+                boxShadow: '0 2px 8px rgba(249,115,22,0.3)',
+                transition: 'all 0.18s',
+                '&:hover': { background: 'linear-gradient(135deg, #c2410c, #ea580c)', boxShadow: '0 4px 12px rgba(249,115,22,0.4)' },
+              }}
+            >
               ← Back to Home
             </Button>
           </Box>

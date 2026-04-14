@@ -142,15 +142,17 @@ const RoleSelection: React.FC = () => {
                 <Button
                   onClick={() => navigate('/login')}
                   sx={{
-                    color: '#2563EB',
-                    fontWeight: 600,
+                    color: '#fff',
+                    fontWeight: 700,
                     textTransform: 'none',
-                    p: 0,
+                    fontSize: '0.82rem',
+                    px: 1.5, py: 0.4,
                     minWidth: 'auto',
-                    '&:hover': {
-                      backgroundColor: 'transparent',
-                      textDecoration: 'underline',
-                    },
+                    borderRadius: '6px',
+                    background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
+                    boxShadow: '0 2px 8px rgba(37,99,235,0.25)',
+                    transition: 'all 0.18s',
+                    '&:hover': { background: 'linear-gradient(135deg, #1e40af, #1d4ed8)', boxShadow: '0 4px 12px rgba(37,99,235,0.35)' },
                   }}
                 >
                   Login here

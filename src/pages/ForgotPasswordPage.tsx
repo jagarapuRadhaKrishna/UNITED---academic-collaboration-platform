@@ -11,9 +11,7 @@ import {
 } from '@/components/ui/input-otp';
 import { sendOTP, verifyOTP, resetPassword } from '@/services/otpService';
 import { toast } from 'sonner';
-
 type Step = 'email' | 'otp' | 'password';
-
 const ForgotPasswordPage: React.FC = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>('email');
@@ -135,7 +133,14 @@ const ForgotPasswordPage: React.FC = () => {
                   <Button type="submit" className="w-full h-12 font-bold text-base rounded-xl bg-gradient-to-r from-blue-800 to-blue-600 hover:from-blue-900 hover:to-blue-700 text-white shadow-md transition-all active:scale-[0.98]" disabled={isSubmitting || !email}>
                     {isSubmitting ? 'Sending...' : 'Send OTP'}
                   </Button>
-                  <button type="button" className="w-full flex items-center justify-center gap-2 text-sm text-slate-400 hover:text-slate-600 transition-colors pt-1" onClick={() => navigate('/login')}>
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-center gap-2 text-sm font-bold text-white h-11 rounded-xl transition-all active:scale-[0.98]"
+                    style={{ background: 'linear-gradient(135deg, #ea580c, #f97316)', boxShadow: '0 2px 8px rgba(249,115,22,0.3)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'linear-gradient(135deg, #c2410c, #ea580c)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'linear-gradient(135deg, #ea580c, #f97316)')}
+                    onClick={() => navigate('/login')}
+                  >
                     <ArrowLeft size={15} /> Back to Login
                   </button>
                 </form>
@@ -208,7 +213,6 @@ const ForgotPasswordPage: React.FC = () => {
               </motion.div>
             )}
           </AnimatePresence>
-
           <p className="text-xs text-slate-400 text-center mt-10">
             Need help? Contact <a href="mailto:support@united.edu" className="text-slate-500 font-semibold hover:underline">support</a>
           </p>
