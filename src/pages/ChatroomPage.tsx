@@ -249,6 +249,15 @@ const ChatroomPage: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [chatroomId]);
 
+  // Poll messages as a fallback if realtime updates are missed
+  useEffect(() => {
+    if (!chatroomId) return;
+    const interval = window.setInterval(() => {
+      fetchMessages();
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [chatroomId]);
+
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
@@ -304,15 +313,34 @@ const ChatroomPage: React.FC = () => {
         if (uploadError) throw uploadError;
         const { data: { publicUrl } } = supabase.storage.from('chat-files').getPublicUrl(filePath);
         const isImage = selectedFile.type.startsWith('image/');
-        const { error } = await supabase.from('messages').insert({
+        const { data: insertedMessage, error } = await supabase.from('messages').insert({
           chatroom_id: chatroomId, sender_id: user.id,
           content: isImage ? '📷 Image' : `📎 ${selectedFile.name}`,
           type: isImage ? 'image' : 'file', file_url: publicUrl, file_name: selectedFile.name,
-        });
+        }).select('*').single();
         if (error) throw error;
         const fileContent = isImage ? '📷 Image' : `📎 ${selectedFile.name}`;
+        const messageToAdd = insertedMessage ? {
+          ...insertedMessage,
+          sender_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'You',
+        } : {
+          id: `pending_${Date.now()}`,
+          chatroom_id: chatroomId,
+          sender_id: user.id,
+          content: fileContent,
+          type: isImage ? 'image' : 'file',
+          file_url: publicUrl,
+          file_name: selectedFile.name,
+          created_at: new Date().toISOString(),
+          sender_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'You',
+        };
+        setMessages(prev => [...prev, messageToAdd]);
         clearSelectedFile();
-        await Promise.all([fetchMessages(), supabase.from('chatrooms').update({ last_activity: new Date().toISOString() }).eq('id', chatroomId), notifyOtherMembers(fileContent)]);
+        await Promise.all([
+          fetchMessages(),
+          supabase.from('chatrooms').update({ last_activity: new Date().toISOString() }).eq('id', chatroomId),
+          notifyOtherMembers(fileContent),
+        ]);
         toast.success(`${isImage ? 'Image' : 'File'} sent!`);
       } catch (err: any) {
         console.error(err);
@@ -324,9 +352,27 @@ const ChatroomPage: React.FC = () => {
         const text = messageText.trim();
         setMessageText('');
         try {
-          await supabase.from('messages').insert({ chatroom_id: chatroomId, sender_id: user.id, content: text, type: 'text' });
+          const { data: insertedMessage, error } = await supabase.from('messages').insert({ chatroom_id: chatroomId, sender_id: user.id, content: text, type: 'text' }).select('*').single();
+          if (error) throw error;
+          const messageToAdd = insertedMessage ? {
+            ...insertedMessage,
+            sender_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'You',
+          } : {
+            id: `pending_${Date.now()}`,
+            chatroom_id: chatroomId,
+            sender_id: user.id,
+            content: text,
+            type: 'text',
+            file_url: null,
+            file_name: null,
+            created_at: new Date().toISOString(),
+            sender_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'You',
+          };
+          setMessages(prev => [...prev, messageToAdd]);
           await fetchMessages();
-        } catch (e) { console.error(e); }
+        } catch (e) {
+          console.error(e);
+        }
       }
       return;
     }
@@ -334,9 +380,28 @@ const ChatroomPage: React.FC = () => {
     const text = messageText.trim();
     setMessageText('');
     try {
-      const { error } = await supabase.from('messages').insert({ chatroom_id: chatroomId, sender_id: user.id, content: text, type: 'text' });
+      const { data: insertedMessage, error } = await supabase.from('messages').insert({ chatroom_id: chatroomId, sender_id: user.id, content: text, type: 'text' }).select('*').single();
       if (error) throw error;
-      await Promise.all([fetchMessages(), supabase.from('chatrooms').update({ last_activity: new Date().toISOString() }).eq('id', chatroomId), notifyOtherMembers(text)]);
+      const messageToAdd = insertedMessage ? {
+        ...insertedMessage,
+        sender_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'You',
+      } : {
+        id: `pending_${Date.now()}`,
+        chatroom_id: chatroomId,
+        sender_id: user.id,
+        content: text,
+        type: 'text',
+        file_url: null,
+        file_name: null,
+        created_at: new Date().toISOString(),
+        sender_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'You',
+      };
+      setMessages(prev => [...prev, messageToAdd]);
+      await Promise.all([
+        fetchMessages(),
+        supabase.from('chatrooms').update({ last_activity: new Date().toISOString() }).eq('id', chatroomId),
+        notifyOtherMembers(text),
+      ]);
     } catch (e) {
       console.error(e);
       setMessageText(text);
@@ -643,7 +708,7 @@ const ChatroomPage: React.FC = () => {
                     transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
                   >
                     <div className="flex items-start gap-2">
-                      <div className={`w-fit min-w-[8.5rem] max-w-[70%] ${isOwn ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'} rounded-2xl px-3 py-2 shadow-sm`}>
+                      <div className={`min-w-0 max-w-[95%] ${isOwn ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'} rounded-2xl px-3 py-2 shadow-sm`}>
                         {!isOwn && <p className="text-[10px] font-semibold mb-0.5 opacity-70">{msg.sender_name}</p>}
                         {msg.type === 'image' && msg.file_url && (
                           <div className="mb-1">
