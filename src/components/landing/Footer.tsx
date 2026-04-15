@@ -1,7 +1,7 @@
 ﻿import React from 'react';
 import { Box, Container, Typography, Link, IconButton } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
-import { GraduationCap, Mail, MapPin, Phone, Linkedin, Github, Globe } from 'lucide-react';
+import { Mail, MapPin, Phone, Linkedin, Github, Globe } from 'lucide-react';
 import { DEVELOPERS } from '@/data/developers';
 
 const Footer: React.FC = () => {
@@ -28,50 +28,82 @@ const Footer: React.FC = () => {
     { label: 'Resources', sectionId: 'features' },
   ];
 
+  const socialLinks = [
+    { icon: Mail, href: `mailto:${developer?.email || 'jagarapuradhakrishna.work@gmail.com'}`, label: 'Gmail', gradient: 'linear-gradient(135deg, #ea580c, #f97316)' },
+    { icon: Linkedin, href: developer?.linkedin || '#', label: 'LinkedIn', gradient: 'linear-gradient(135deg, #0ea5e9, #3b82f6)' },
+    { icon: Github, href: developer?.github || '#', label: 'GitHub', gradient: 'linear-gradient(135deg, #8b5cf6, #6366f1)' },
+    { icon: Globe, href: developer?.portfolio || '#', label: 'Portfolio', gradient: 'linear-gradient(135deg, #10b981, #06b6d4)' },
+  ];
+
+  const linkSx = {
+    border: 0,
+    background: 'none',
+    p: 0,
+    textAlign: 'left' as const,
+    width: '100%',
+    display: 'block',
+    color: '#64748b',
+    textDecoration: 'none',
+    mb: 1.25,
+    fontSize: '0.875rem',
+    transition: 'color 0.2s',
+    cursor: 'pointer',
+    '&:hover': { color: '#F97316' },
+  };
+
   return (
     <Box
       id="footer"
       sx={{
-        backgroundColor: '#111827',
+        backgroundColor: '#0a0f1e',
         color: '#FFFFFF',
         pt: 8,
         pb: 4,
+        position: 'relative',
+        overflow: 'hidden',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: 0, left: 0, right: 0,
+          height: 2,
+          background: 'linear-gradient(90deg, #6366f1 0%, #F97316 50%, #10b981 100%)',
+        },
       }}
     >
-      <Container maxWidth="lg">
+      {/* Background glow */}
+      <Box sx={{
+        position: 'absolute', bottom: 0, left: '30%', width: '40%', height: '60%',
+        background: 'radial-gradient(ellipse, rgba(99,102,241,0.05) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+
+      <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
         <Box
           sx={{
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
-            gap: 4,
-            mb: 6,
+            gap: 5,
+            mb: 7,
           }}
         >
+          {/* Brand column */}
           <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <GraduationCap size={28} color="#2563EB" strokeWidth={2.5} />
-              <Typography
-                variant="h6"
-                sx={{
-                  fontWeight: 700,
-                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }}
-              >
-                UnitEd
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+              <Box
+                component="img"
+                src="/favicon.svg"
+                alt="UnitEd"
+                sx={{ width: 36, height: 36, filter: 'drop-shadow(0 2px 8px rgba(249,115,22,0.4))' }}
+              />
+              <Typography variant="h6" sx={{ fontWeight: 800, color: '#f1f5f9' }}>
+                Unit<Box component="span" sx={{ color: '#F97316' }}>Ed</Box>
               </Typography>
             </Box>
-            <Typography variant="body2" sx={{ color: '#9CA3AF', mb: 3, lineHeight: 1.7 }}>
+            <Typography variant="body2" sx={{ color: '#64748b', mb: 3, lineHeight: 1.8 }}>
               Connecting students and faculty for research, projects, and hackathons through AI-powered matching.
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
-              {[
-                { icon: Mail, href: `mailto:${developer?.email || 'jagarapuradhakrishna.work@gmail.com'}`, label: 'Gmail' },
-                { icon: Linkedin, href: developer?.linkedin || '#', label: 'LinkedIn' },
-                { icon: Github, href: developer?.github || '#', label: 'GitHub' },
-                { icon: Globe, href: developer?.portfolio || '#', label: 'Portfolio' },
-              ].map((social, index) => {
+              {socialLinks.map((social, index) => {
                 const Icon = social.icon;
                 return (
                   <IconButton
@@ -81,22 +113,30 @@ const Footer: React.FC = () => {
                     rel="noopener noreferrer"
                     aria-label={social.label}
                     sx={{
-                      color: '#9CA3AF',
+                      width: 36, height: 36,
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      color: '#64748b',
+                      transition: 'all 0.25s ease',
                       '&:hover': {
-                        color: '#2563EB',
-                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        background: social.gradient,
+                        border: '1px solid transparent',
+                        color: '#fff',
+                        transform: 'translateY(-3px)',
+                        boxShadow: '0 8px 20px rgba(0,0,0,0.3)',
                       },
                     }}
                   >
-                    <Icon size={20} />
+                    <Icon size={16} />
                   </IconButton>
                 );
               })}
             </Box>
           </Box>
 
+          {/* Quick Links */}
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2.5, color: '#f1f5f9', letterSpacing: 0.5 }}>
               Quick Links
             </Typography>
             {quickLinks.map((item) => (
@@ -106,29 +146,16 @@ const Footer: React.FC = () => {
                 to={item.to}
                 type={item.sectionId ? 'button' : undefined}
                 onClick={item.sectionId ? () => scrollToSection(item.sectionId as string) : undefined}
-                sx={{
-                  border: 0,
-                  background: 'none',
-                  p: 0,
-                  textAlign: 'left',
-                  width: '100%',
-                  display: 'block',
-                  color: '#9CA3AF',
-                  textDecoration: 'none',
-                  mb: 1,
-                  transition: 'color 0.2s',
-                  '&:hover': {
-                    color: '#2563EB',
-                  },
-                }}
+                sx={linkSx}
               >
                 {item.label}
               </Link>
             ))}
           </Box>
 
+          {/* For Students */}
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2.5, color: '#f1f5f9', letterSpacing: 0.5 }}>
               For Students
             </Typography>
             {studentLinks.map((item) => (
@@ -138,76 +165,46 @@ const Footer: React.FC = () => {
                 to={item.to}
                 type={item.sectionId ? 'button' : undefined}
                 onClick={item.sectionId ? () => scrollToSection(item.sectionId as string) : undefined}
-                sx={{
-                  border: 0,
-                  background: 'none',
-                  p: 0,
-                  textAlign: 'left',
-                  width: '100%',
-                  display: 'block',
-                  color: '#9CA3AF',
-                  textDecoration: 'none',
-                  mb: 1,
-                  transition: 'color 0.2s',
-                  '&:hover': {
-                    color: '#2563EB',
-                  },
-                }}
+                sx={linkSx}
               >
                 {item.label}
               </Link>
             ))}
           </Box>
 
+          {/* Contact */}
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2.5, color: '#f1f5f9', letterSpacing: 0.5 }}>
               Created By
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'start', gap: 1.5, mb: 2 }}>
-              <Mail size={18} color="#9CA3AF" />
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 2 }}>
+              <Mail size={15} color="#F97316" style={{ marginTop: 2, flexShrink: 0 }} />
               <Link
                 href={`mailto:${developer?.email || 'jagarapuradhakrishna.work@gmail.com'}`}
-                sx={{
-                  color: '#9CA3AF',
-                  textDecoration: 'none',
-                  '&:hover': {
-                    color: '#2563EB',
-                  },
-                }}
+                sx={{ color: '#64748b', textDecoration: 'none', fontSize: '0.875rem', lineHeight: 1.6, '&:hover': { color: '#F97316' } }}
               >
                 {developer?.email || 'jagarapuradhakrishna.work@gmail.com'}
               </Link>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'start', gap: 1.5, mb: 2 }}>
-              <Phone size={18} color="#9CA3AF" />
-              <Typography variant="body2" sx={{ color: '#9CA3AF', lineHeight: 1.7 }}>
-                +91 9550897539
-                <br />
-                +91 7075827539
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 2 }}>
+              <Phone size={15} color="#F97316" style={{ marginTop: 2, flexShrink: 0 }} />
+              <Typography variant="body2" sx={{ color: '#64748b', lineHeight: 1.7, fontSize: '0.875rem' }}>
+                +91 9550897539<br />+91 7075827539
               </Typography>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'start', gap: 1.5 }}>
-              <MapPin size={18} color="#9CA3AF" />
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+              <MapPin size={15} color="#F97316" style={{ marginTop: 2, flexShrink: 0 }} />
               <Box>
                 <Link
                   href="https://anits.org/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  sx={{
-                    color: '#9CA3AF',
-                    textDecoration: 'none',
-                    lineHeight: 1.6,
-                    '&:hover': {
-                      color: '#2563EB',
-                    },
-                  }}
+                  sx={{ color: '#64748b', textDecoration: 'none', fontSize: '0.875rem', lineHeight: 1.6, '&:hover': { color: '#F97316' } }}
                 >
                   Anil Neerukonda Institute of Technology & Sciences
                 </Link>
-                <Typography variant="body2" sx={{ color: '#9CA3AF', lineHeight: 1.6 }}>
-                  <br />
-                  Sangivalasa, Bheemunipatnam Mandal
-                  <br />
+                <Typography variant="body2" sx={{ color: '#64748b', lineHeight: 1.6, fontSize: '0.8rem', mt: 0.5 }}>
+                  Sangivalasa, Bheemunipatnam Mandal<br />
                   Visakhapatnam, Andhra Pradesh 531162
                 </Typography>
               </Box>
@@ -215,10 +212,11 @@ const Footer: React.FC = () => {
           </Box>
         </Box>
 
+        {/* Bottom bar */}
         <Box
           sx={{
-            pt: 4,
-            borderTop: '1px solid #374151',
+            pt: 3,
+            borderTop: '1px solid rgba(255,255,255,0.06)',
             display: 'flex',
             flexDirection: { xs: 'column', md: 'row' },
             justifyContent: 'space-between',
@@ -226,8 +224,8 @@ const Footer: React.FC = () => {
             gap: 2,
           }}
         >
-          <Typography variant="body2" sx={{ color: '#9CA3AF' }}>
-            © {currentYear} UnitEd. All rights reserved.
+          <Typography variant="body2" sx={{ color: '#475569', fontSize: '0.8rem' }}>
+            © {currentYear} Unit<Box component="span" sx={{ color: '#F97316' }}>Ed</Box>. All rights reserved.
           </Typography>
           <Box sx={{ display: 'flex', gap: 3 }}>
             {[
@@ -239,15 +237,7 @@ const Footer: React.FC = () => {
                 key={item.label}
                 component={RouterLink}
                 to={item.to}
-                sx={{
-                  color: '#9CA3AF',
-                  textDecoration: 'none',
-                  fontSize: '0.875rem',
-                  transition: 'color 0.2s',
-                  '&:hover': {
-                    color: '#2563EB',
-                  },
-                }}
+                sx={{ color: '#475569', textDecoration: 'none', fontSize: '0.8rem', transition: 'color 0.2s', '&:hover': { color: '#F97316' } }}
               >
                 {item.label}
               </Link>
