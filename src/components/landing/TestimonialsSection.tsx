@@ -11,21 +11,27 @@ const testimonials = [
     role: 'Student',
     department: 'CSD Dept',
     avatar: '/image/godavarthi vedaaksharee.png',
-    quote: 'This platform made it much easier to find the right teammates for my academic projects. Instead of searching manually or asking around, I could quickly discover students with the skills needed for my project. The collaboration features also help us communicate and manage tasks effectively, making the entire project workflow more organized and productive.',
+    quote: 'This platform made it much easier to find the right teammates for my academic projects. The collaboration features help us communicate and manage tasks effectively, making the entire workflow more organized and productive.',
+    accent: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+    glow: 'rgba(99,102,241,0.18)',
   },
   {
     name: 'Jagarapu Radha Krishna',
     role: 'Student',
     department: 'CSD Dept',
     avatar: '/image/krishna.png',
-    quote: 'Finding project partners used to take a lot of time, but this platform makes it simple. I can explore different project ideas, join teams, and collaborate with students who share similar interests. It has really improved the way we work together on academic projects.',
+    quote: 'Finding project partners used to take a lot of time, but this platform makes it simple. I can explore different project ideas, join teams, and collaborate with students who share similar interests.',
+    accent: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+    glow: 'rgba(6,182,212,0.18)',
   },
   {
     name: 'Annanya',
     role: 'Student',
     department: 'CSD Dept',
     avatar: '',
-    quote: 'The platform provides a great space for students to collaborate on projects. From discovering new project opportunities to connecting with teammates, everything is well organized. It helps students focus more on building projects rather than struggling to find the right team.',
+    quote: 'The platform provides a great space for students to collaborate on projects. From discovering new opportunities to connecting with teammates — everything is well organized and focused on productivity.',
+    accent: 'linear-gradient(135deg, #10b981, #06b6d4)',
+    glow: 'rgba(16,185,129,0.18)',
   },
 ];
 
@@ -38,11 +44,25 @@ const formatStatNumber = (value: number | null) => {
   return value.toLocaleString();
 };
 
+const statGradients = [
+  'linear-gradient(135deg, #6366f1, #8b5cf6)',
+  'linear-gradient(135deg, #06b6d4, #3b82f6)',
+  'linear-gradient(135deg, #10b981, #06b6d4)',
+  'linear-gradient(135deg, #f97316, #eab308)',
+];
+
+const containerVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.15 } },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 40 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
+};
+
 const TestimonialsSection: React.FC<TestimonialsSectionProps> = ({ stats }) => {
-  const [ref, inView] = useInView({
-    triggerOnce: false,
-    threshold: 0.1,
-  });
+  const [ref, inView] = useInView({ triggerOnce: false, threshold: 0.08 });
 
   const statItems = [
     { number: formatStatNumber(stats.totalUsers), label: 'Active Users' },
@@ -55,65 +75,100 @@ const TestimonialsSection: React.FC<TestimonialsSectionProps> = ({ stats }) => {
     <Box
       id="testimonials"
       sx={{
-        py: { xs: 8, md: 12 },
-        background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+        py: { xs: 10, md: 14 },
+        backgroundColor: '#111827',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <Container maxWidth="lg">
-        {/* Stats Section */}
+      {/* Background glows */}
+      <Box sx={{
+        position: 'absolute', top: '-10%', left: '20%', width: '60%', height: '40%',
+        background: 'radial-gradient(ellipse, rgba(99,102,241,0.07) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+      <Box sx={{
+        position: 'absolute', bottom: '-10%', right: '20%', width: '60%', height: '40%',
+        background: 'radial-gradient(ellipse, rgba(16,185,129,0.06) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+
+      <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
         <motion.div
           ref={ref}
-          initial={{ opacity: 0, y: 30 }}
-          animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.8 }}
+          variants={containerVariants}
+          initial="hidden"
+          animate={inView ? 'visible' : 'hidden'}
         >
+          {/* Stats badge */}
+          <motion.div variants={itemVariants}>
+            <Box sx={{ textAlign: 'center', mb: 2 }}>
+              <Box
+                component="span"
+                sx={{
+                  display: 'inline-block',
+                  px: 2.5, py: 0.75,
+                  borderRadius: 99,
+                  border: '1px solid rgba(6,182,212,0.4)',
+                  background: 'rgba(6,182,212,0.1)',
+                  color: '#67e8f9',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  letterSpacing: 3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                By The Numbers
+              </Box>
+            </Box>
+          </motion.div>
+
+          {/* Stats grid */}
           <Box
             sx={{
               display: 'grid',
               gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
-              gap: 4,
-              mb: 10,
+              gap: 3,
+              mb: 12,
             }}
           >
             {statItems.map((stat, index) => (
               <motion.div
                 key={index}
-                initial={{ opacity: 0, scale: 0.8 }}
+                initial={{ opacity: 0, scale: 0.85 }}
                 animate={inView ? { opacity: 1, scale: 1 } : {}}
-                transition={{ delay: index * 0.1, duration: 0.5 }}
+                transition={{ delay: 0.1 + index * 0.1, duration: 0.55 }}
               >
                 <Box
                   sx={{
                     textAlign: 'center',
-                    p: 3,
+                    p: 3.5,
                     borderRadius: 3,
-                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                    backdropFilter: 'blur(10px)',
-                    transition: 'all 0.3s ease',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    transition: 'all 0.35s ease',
                     '&:hover': {
+                      background: 'rgba(255,255,255,0.08)',
+                      border: '1px solid rgba(255,255,255,0.15)',
                       transform: 'translateY(-8px)',
-                      backgroundColor: '#FFFFFF',
-                      boxShadow: '0 10px 30px rgba(37, 99, 235, 0.15)',
+                      boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
                     },
                   }}
                 >
                   <Typography
                     variant="h3"
                     sx={{
-                      color: '#2563EB',
-                      fontWeight: 700,
-                      mb: 1,
+                      fontWeight: 800,
+                      mb: 0.75,
+                      background: statGradients[index],
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
                     }}
                   >
                     {stat.number}
                   </Typography>
-                  <Typography
-                    variant="body1"
-                    sx={{
-                      color: '#6B7280',
-                      fontWeight: 500,
-                    }}
-                  >
+                  <Typography variant="body2" sx={{ color: '#94a3b8', fontWeight: 500 }}>
                     {stat.label}
                   </Typography>
                 </Box>
@@ -121,32 +176,64 @@ const TestimonialsSection: React.FC<TestimonialsSectionProps> = ({ stats }) => {
             ))}
           </Box>
 
-          {/* Testimonials */}
-          <Typography
-            variant="h2"
-            sx={{
-              color: '#111827',
-              fontWeight: 700,
-              mb: 2,
-              textAlign: 'center',
-            }}
-          >
-            What Our Users Say
-          </Typography>
+          {/* Testimonials heading */}
+          <motion.div variants={itemVariants}>
+            <Box sx={{ textAlign: 'center', mb: 2 }}>
+              <Box
+                component="span"
+                sx={{
+                  display: 'inline-block',
+                  px: 2.5, py: 0.75,
+                  borderRadius: 99,
+                  border: '1px solid rgba(99,102,241,0.4)',
+                  background: 'rgba(99,102,241,0.1)',
+                  color: '#a5b4fc',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  letterSpacing: 3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                User Stories
+              </Box>
+            </Box>
+          </motion.div>
 
-          <Typography
-            variant="h6"
-            sx={{
-              color: '#6B7280',
-              textAlign: 'center',
-              mb: 6,
-              maxWidth: 600,
-              mx: 'auto',
-            }}
-          >
-            Join thousands of students and faculty who are already collaborating
-          </Typography>
+          <motion.div variants={itemVariants}>
+            <Typography
+              variant="h2"
+              sx={{
+                fontWeight: 800,
+                mb: 2,
+                textAlign: 'center',
+                background: 'linear-gradient(135deg, #f1f5f9 0%, #a5b4fc 60%, #6366f1 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}
+            >
+              What Our Users Say
+            </Typography>
+          </motion.div>
 
+          <motion.div variants={itemVariants}>
+            <Typography
+              variant="h6"
+              sx={{
+                color: '#94a3b8',
+                textAlign: 'center',
+                mb: 7,
+                maxWidth: 600,
+                mx: 'auto',
+                fontWeight: 400,
+                lineHeight: 1.8,
+              }}
+            >
+              Join thousands of students and faculty who are already collaborating on UnitEd
+            </Typography>
+          </motion.div>
+
+          {/* Testimonial cards */}
           <Box
             sx={{
               display: 'grid',
@@ -154,94 +241,72 @@ const TestimonialsSection: React.FC<TestimonialsSectionProps> = ({ stats }) => {
               gap: 4,
             }}
           >
-            {testimonials.map((testimonial, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 50 }}
-                animate={inView ? { opacity: 1, y: 0 } : {}}
-                transition={{ delay: 0.3 + index * 0.15, duration: 0.6 }}
-              >
+            {testimonials.map((t, index) => (
+              <motion.div key={index} variants={itemVariants}>
                 <Box
                   sx={{
                     p: 4,
-                    borderRadius: 3,
-                    backgroundColor: '#FFFFFF',
+                    borderRadius: 4,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
                     height: '100%',
                     position: 'relative',
-                    transition: 'all 0.3s ease',
+                    overflow: 'hidden',
+                    transition: 'all 0.4s ease',
                     '&:hover': {
-                      transform: 'translateY(-8px)',
-                      boxShadow: '0 15px 40px rgba(0,0,0,0.1)',
+                      background: 'rgba(255,255,255,0.08)',
+                      transform: 'translateY(-10px)',
+                      boxShadow: `0 25px 65px ${t.glow}`,
+                    },
+                    '&::before': {
+                      content: '""',
+                      position: 'absolute',
+                      top: 0, left: 0, right: 0,
+                      height: 3,
+                      background: t.accent,
                     },
                   }}
                 >
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      top: 20,
-                      right: 20,
-                      opacity: 0.1,
-                    }}
-                  >
-                    <Quote size={48} color="#2563EB" />
+                  {/* Quote icon */}
+                  <Box sx={{ position: 'absolute', top: 20, right: 20, opacity: 0.12 }}>
+                    <Quote size={44} color="#a5b4fc" />
                   </Box>
 
+                  {/* Author */}
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
                     <Avatar
-                      src={testimonial.avatar}
+                      src={t.avatar}
                       sx={{
-                        width: 56,
-                        height: 56,
-                        mr: 2,
-                        border: '3px solid #2563EB',
+                        width: 52, height: 52, mr: 2,
+                        background: t.accent,
+                        fontSize: '1rem',
+                        fontWeight: 700,
+                        color: '#fff',
+                        border: '2px solid rgba(255,255,255,0.1)',
                       }}
                     >
-                      {testimonial.name
-                        .split(' ')
-                        .map((part) => part[0])
-                        .join('')
-                        .slice(0, 2)
-                        .toUpperCase()}
+                      {t.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
                     </Avatar>
                     <Box>
-                      <Typography
-                        variant="h6"
-                        sx={{
-                          color: '#111827',
-                          fontWeight: 600,
-                          mb: 0.5,
-                        }}
-                      >
-                        {testimonial.name}
+                      <Typography variant="subtitle1" sx={{ color: '#f1f5f9', fontWeight: 700, mb: 0.25 }}>
+                        {t.name}
                       </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: '#6B7280',
-                        }}
-                      >
-                        {testimonial.role}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: '#6B7280',
-                        }}
-                      >
-                        {testimonial.department}
+                      <Typography variant="body2" sx={{ color: '#64748b', lineHeight: 1.4 }}>
+                        {t.role} · {t.department}
                       </Typography>
                     </Box>
                   </Box>
 
+                  {/* Quote */}
                   <Typography
-                    variant="body1"
+                    variant="body2"
                     sx={{
-                      color: '#374151',
-                      lineHeight: 1.7,
+                      color: '#cbd5e1',
+                      lineHeight: 1.85,
                       fontStyle: 'italic',
                     }}
                   >
-                    "{testimonial.quote}"
+                    "{t.quote}"
                   </Typography>
                 </Box>
               </motion.div>

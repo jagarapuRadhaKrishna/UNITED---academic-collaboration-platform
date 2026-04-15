@@ -61,19 +61,32 @@ const HeroSection: React.FC<HeroSectionProps> = ({ stats }) => {
           <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 58%' }, maxWidth: { md: '58%' } }}>
             <Box>
               {/* Headline */}
-              <Typography
-                variant="h1"
-                sx={{
-                  color: '#FFFFFF',
-                  mb: 1,
-                  fontSize: { xs: '3rem', md: '4.5rem' },
-                  fontWeight: 800,
-                  lineHeight: 1.1,
-                  letterSpacing: '-0.03em',
-                }}
-              >
-                Unit<Box component="span" sx={{ color: '#2563EB' }}>Ed</Box>
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, md: 2 }, mb: 1 }}>
+                <Box
+                  component="img"
+                  src="/favicon.svg"
+                  alt="UnitEd icon"
+                  sx={{
+                    width: { xs: 72, md: 96 },
+                    height: { xs: 72, md: 96 },
+                    filter: 'drop-shadow(0 4px 14px rgba(37,99,235,0.5))',
+                    userSelect: 'none',
+                  }}
+                />
+                <Typography
+                  variant="h1"
+                  sx={{
+                    color: '#FFFFFF',
+                    mb: 0,
+                    fontSize: { xs: '3rem', md: '4.5rem' },
+                    fontWeight: 800,
+                    lineHeight: 1.1,
+                    letterSpacing: '-0.03em',
+                  }}
+                >
+                  Unit<Box component="span" sx={{ color: '#2563EB' }}>Ed</Box>
+                </Typography>
+              </Box>
 
               {/* Tagline */}
               <Typography

@@ -1,128 +1,191 @@
 ﻿import React from 'react';
-import { Box, Container, Typography, Card, CardContent } from '@mui/material';
+import { Box, Container, Typography } from '@mui/material';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
-import { 
-  User, Brain, Users, MessageCircle, Target, 
-  Lightbulb, Calendar, Bell, Mail, Star, Filter,
-  BarChart, Briefcase
+import {
+  User, Brain, Users, MessageCircle, Target,
+  Bell, Mail, Star, Filter, BarChart, Briefcase
 } from 'lucide-react';
 
 const features = [
   {
     icon: User,
     title: 'Smart Profiles',
-    description: 'Comprehensive profiles with skills, projects, achievements, and resume integration. Showcase your expertise with style.',
-    color: '#2563EB',
+    description: 'Comprehensive profiles with skills, projects, achievements, and resume integration.',
+    gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+    glow: 'rgba(99,102,241,0.22)',
   },
   {
     icon: Brain,
     title: 'AI-Powered Matching',
-    description: 'Advanced ML algorithms match you with perfect team members and opportunities based on skills, interests, and compatibility.',
-    color: '#F97316',
+    description: 'Advanced ML algorithms match you with perfect team members based on skills and compatibility.',
+    gradient: 'linear-gradient(135deg, #f97316, #eab308)',
+    glow: 'rgba(249,115,22,0.22)',
   },
   {
     icon: Users,
     title: 'Team Formation',
-    description: 'Create diverse teams with complementary skills. Multi-step posting, role management, and smart candidate recommendations.',
-    color: '#10B981',
+    description: 'Create diverse teams with complementary skills. Smart candidate recommendations included.',
+    gradient: 'linear-gradient(135deg, #10b981, #06b6d4)',
+    glow: 'rgba(16,185,129,0.22)',
   },
   {
     icon: MessageCircle,
     title: 'Real-time Chat',
-    description: 'Group chats, channels, and direct messaging with file sharing, reactions, and message threading for seamless collaboration.',
-    color: '#8B5CF6',
+    description: 'Group chats, channels, and direct messaging with file sharing and message threading.',
+    gradient: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
+    glow: 'rgba(139,92,246,0.22)',
   },
   {
     icon: Target,
     title: 'Personalized Feed',
-    description: 'AI-curated feed showing opportunities that match your profile. Smart filters to find exactly what you need.',
-    color: '#EC4899',
+    description: 'AI-curated feed showing opportunities that match your profile with smart filters.',
+    gradient: 'linear-gradient(135deg, #ec4899, #f97316)',
+    glow: 'rgba(236,72,153,0.22)',
   },
   {
     icon: Bell,
     title: 'Smart Notifications',
-    description: 'Real-time alerts for applications, team invitations, messages, and opportunities. Never miss important updates.',
-    color: '#EF4444',
+    description: 'Real-time alerts for applications, team invitations, and opportunities. Stay informed.',
+    gradient: 'linear-gradient(135deg, #ef4444, #f97316)',
+    glow: 'rgba(239,68,68,0.22)',
   },
   {
     icon: Mail,
     title: 'Email Integration',
-    description: 'Automated email notifications for applications, acceptances, and team updates. Stay connected anywhere.',
-    color: '#3B82F6',
+    description: 'Automated email notifications for applications, acceptances, and team updates.',
+    gradient: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+    glow: 'rgba(59,130,246,0.22)',
   },
   {
     icon: BarChart,
     title: 'Analytics Dashboard',
-    description: 'Track your application success rate, skill demand, profile views, and engagement metrics with detailed insights.',
-    color: '#10B981',
+    description: 'Track application success rate, skill demand, profile views, and engagement metrics.',
+    gradient: 'linear-gradient(135deg, #10b981, #3b82f6)',
+    glow: 'rgba(16,185,129,0.22)',
   },
   {
     icon: Filter,
     title: 'Advanced Search',
-    description: 'Filter opportunities by skills, department, project type, timeline, and more. Find your perfect match quickly.',
-    color: '#6366F1',
+    description: 'Filter opportunities by skills, department, project type, and timeline.',
+    gradient: 'linear-gradient(135deg, #6366f1, #06b6d4)',
+    glow: 'rgba(99,102,241,0.22)',
   },
   {
     icon: Briefcase,
     title: 'Project Management',
-    description: 'Manage your active projects, track team members, monitor progress, and handle applications all in one place.',
-    color: '#14B8A6',
+    description: 'Manage active projects, track team members, monitor progress all in one place.',
+    gradient: 'linear-gradient(135deg, #14b8a6, #06b6d4)',
+    glow: 'rgba(20,184,166,0.22)',
   },
   {
     icon: Star,
     title: 'Recommendations',
-    description: 'Get personalized suggestions for team members, skills to learn, and projects to join based on your goals.',
-    color: '#F59E0B',
+    description: 'Personalized suggestions for team members, skills to learn, and projects to join.',
+    gradient: 'linear-gradient(135deg, #f59e0b, #f97316)',
+    glow: 'rgba(245,158,11,0.22)',
   },
 ];
 
+const containerVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 40, scale: 0.95 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.55 } },
+};
+
 const FeaturesSection: React.FC = () => {
-  const [ref, inView] = useInView({
-    triggerOnce: false,
-    threshold: 0.1,
-  });
+  const [ref, inView] = useInView({ triggerOnce: false, threshold: 0.05 });
 
   return (
     <Box
       id="features"
       sx={{
-        py: { xs: 8, md: 12 },
-        backgroundColor: '#EFF6FF',
+        py: { xs: 10, md: 14 },
+        backgroundColor: '#111827',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <Container maxWidth="lg">
+      {/* Background decorations */}
+      <Box sx={{
+        position: 'absolute', top: '10%', right: '-5%', width: '35%', height: '50%',
+        background: 'radial-gradient(ellipse, rgba(139,92,246,0.08) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+      <Box sx={{
+        position: 'absolute', bottom: '10%', left: '-5%', width: '35%', height: '50%',
+        background: 'radial-gradient(ellipse, rgba(6,182,212,0.06) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+
+      <Container maxWidth="xl" sx={{ position: 'relative', zIndex: 1 }}>
         <motion.div
           ref={ref}
-          initial={{ opacity: 0, y: 30 }}
-          animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.8 }}
+          variants={containerVariants}
+          initial="hidden"
+          animate={inView ? 'visible' : 'hidden'}
         >
-          <Typography
-            variant="h2"
-            sx={{
-              color: '#111827',
-              fontWeight: 700,
-              mb: 2,
-              textAlign: 'center',
-            }}
-          >
-            Powerful Features for Academic Success
-          </Typography>
+          {/* Badge */}
+          <motion.div variants={itemVariants}>
+            <Box sx={{ textAlign: 'center', mb: 2 }}>
+              <Box
+                component="span"
+                sx={{
+                  display: 'inline-block',
+                  px: 2.5, py: 0.75,
+                  borderRadius: 99,
+                  border: '1px solid rgba(139,92,246,0.4)',
+                  background: 'rgba(139,92,246,0.1)',
+                  color: '#c4b5fd',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  letterSpacing: 3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Platform Features
+              </Box>
+            </Box>
+          </motion.div>
 
-          <Typography
-            variant="h6"
-            sx={{
-              color: '#6B7280',
-              textAlign: 'center',
-              mb: 6,
-              maxWidth: 700,
-              mx: 'auto',
-            }}
-          >
-            A comprehensive platform with powerful features designed to revolutionize academic collaboration and team building
-          </Typography>
+          {/* Heading */}
+          <motion.div variants={itemVariants}>
+            <Typography
+              variant="h2"
+              sx={{
+                fontWeight: 800,
+                mb: 2,
+                textAlign: 'center',
+                color: '#f1f5f9',
+              }}
+            >
+              Powerful Features for{' '}<Box component="span" sx={{ color: '#F97316' }}>Academic Success</Box>
+            </Typography>
+          </motion.div>
 
+          {/* Subtitle */}
+          <motion.div variants={itemVariants}>
+            <Typography
+              variant="h6"
+              sx={{
+                color: '#94a3b8',
+                textAlign: 'center',
+                mb: 8,
+                maxWidth: 700,
+                mx: 'auto',
+                fontWeight: 400,
+                lineHeight: 1.8,
+              }}
+            >
+              A comprehensive platform with powerful tools designed to revolutionize academic collaboration and team building
+            </Typography>
+          </motion.div>
+
+          {/* Features Grid */}
           <Box
             sx={{
               display: 'grid',
@@ -133,63 +196,49 @@ const FeaturesSection: React.FC = () => {
             {features.map((feature, index) => {
               const Icon = feature.icon;
               return (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 50 }}
-                  animate={inView ? { opacity: 1, y: 0 } : {}}
-                  transition={{ delay: index * 0.15, duration: 0.6 }}
-                >
-                  <Card
+                <motion.div key={index} variants={itemVariants}>
+                  <Box
                     sx={{
                       height: '100%',
+                      p: 3.5,
                       borderRadius: 3,
-                      border: '1px solid #E5E7EB',
-                      transition: 'all 0.3s ease',
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      transition: 'all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                      cursor: 'default',
                       '&:hover': {
+                        background: 'rgba(255,255,255,0.07)',
+                        border: '1px solid rgba(255,255,255,0.15)',
                         transform: 'translateY(-8px)',
-                        boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
-                        borderColor: feature.color,
+                        boxShadow: `0 20px 50px ${feature.glow}`,
                       },
                     }}
                   >
-                    <CardContent sx={{ p: 4 }}>
-                      <Box
-                        sx={{
-                          width: 56,
-                          height: 56,
-                          borderRadius: 2,
-                          backgroundColor: `${feature.color}15`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          mb: 3,
-                        }}
-                      >
-                        <Icon size={28} color={feature.color} strokeWidth={2} />
-                      </Box>
-
-                      <Typography
-                        variant="h6"
-                        sx={{
-                          color: '#111827',
-                          fontWeight: 600,
-                          mb: 1.5,
-                        }}
-                      >
-                        {feature.title}
-                      </Typography>
-
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: '#6B7280',
-                          lineHeight: 1.7,
-                        }}
-                      >
-                        {feature.description}
-                      </Typography>
-                    </CardContent>
-                  </Card>
+                    <Box
+                      sx={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: 2.5,
+                        background: feature.gradient,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        mb: 2.5,
+                        boxShadow: `0 6px 20px ${feature.glow}`,
+                      }}
+                    >
+                      <Icon size={24} color="#fff" strokeWidth={2} />
+                    </Box>
+                    <Typography
+                      variant="h6"
+                      sx={{ color: '#f1f5f9', fontWeight: 700, mb: 1, fontSize: '1rem' }}
+                    >
+                      {feature.title}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#94a3b8', lineHeight: 1.75 }}>
+                      {feature.description}
+                    </Typography>
+                  </Box>
                 </motion.div>
               );
             })}
