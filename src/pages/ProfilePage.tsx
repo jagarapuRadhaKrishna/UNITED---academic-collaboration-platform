@@ -30,6 +30,17 @@ const ProfilePage: React.FC = () => {
     leetcode: (user as any)?.leetcode || '', cgpa: (user as any)?.cgpa || '',
     skills: user?.skills || [], projects: user?.projects || [], achievements: user?.achievements || [],
     resumeUrl: (user as any)?.resumeUrl || '', coverLetter: (user as any)?.coverLetter || '',
+    // Academic / professional fields
+    rollNumber: (user as any)?.rollNumber || '',
+    department: (user as any)?.department || '',
+    yearOfGraduation: (user as any)?.yearOfGraduation || '',
+    employeeId: (user as any)?.employeeId || '',
+    designation: (user as any)?.designation || '',
+    qualification: (user as any)?.qualification || '',
+    specialization: (user as any)?.specialization || [],
+    totalExperience: (user as any)?.totalExperience || '',
+    teachingExperience: (user as any)?.teachingExperience || '',
+    industryExperience: (user as any)?.industryExperience || '',
   });
   const [newSkill, setNewSkill] = useState('');
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -105,6 +116,17 @@ const ProfilePage: React.FC = () => {
       achievements: user.achievements || [],
       resumeUrl: user.resumeUrl || '',
       coverLetter: user.coverLetter || '',
+      // Academic / professional
+      rollNumber: (user as any).rollNumber || '',
+      department: (user as any).department || '',
+      yearOfGraduation: (user as any).yearOfGraduation || '',
+      employeeId: (user as any).employeeId || '',
+      designation: (user as any).designation || '',
+      qualification: (user as any).qualification || '',
+      specialization: (user as any).specialization || [],
+      totalExperience: (user as any).totalExperience || '',
+      teachingExperience: (user as any).teachingExperience || '',
+      industryExperience: (user as any).industryExperience || '',
     });
   }, [user]);
 
@@ -126,16 +148,32 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  const handleAddProject = () => {
+  const handleAddProject = async () => {
     if (!newProject.title.trim()) return;
-    setFormData(p => ({ ...p, projects: [...p.projects, { id: `proj_${Date.now()}`, ...newProject }] }));
+    const proj = { id: `proj_${Date.now()}`, ...newProject };
+    const updatedProjects = [...(formData.projects || []), proj];
+    setFormData(p => ({ ...p, projects: updatedProjects }));
+    try {
+      await updateProfile({ projects: updatedProjects } as any);
+      toast({ title: 'Project added', description: 'Saved to profile.' });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to save project', variant: 'destructive' });
+    }
     setProjectDialogOpen(false);
     setNewProject({ title: '', description: '', link: '', skills: [] });
   };
 
-  const handleAddAchievement = () => {
+  const handleAddAchievement = async () => {
     if (!newAchievement.title.trim()) return;
-    setFormData(p => ({ ...p, achievements: [...p.achievements, { id: `ach_${Date.now()}`, ...newAchievement }] }));
+    const ach = { id: `ach_${Date.now()}`, ...newAchievement };
+    const updated = [...(formData.achievements || []), ach];
+    setFormData(p => ({ ...p, achievements: updated }));
+    try {
+      await updateProfile({ achievements: updated } as any);
+      toast({ title: 'Achievement added', description: 'Saved to profile.' });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to save achievement', variant: 'destructive' });
+    }
     setAchievementDialogOpen(false);
     setNewAchievement({ title: '', description: '', date: '', issuer: '' });
   };
@@ -414,7 +452,7 @@ const ProfilePage: React.FC = () => {
                     <SaveCancelButtons section="about" />
                   </div>
                 ) : (
-                  <p className="text-sm text-foreground/90">{formData.bio || 'No bio added yet. Click edit to add your bio.'}</p>
+                  <p className="text-sm text-foreground/90 whitespace-pre-line">{formData.bio || 'No bio added yet. Click edit to add your bio.'}</p>
                 )}
               </CardContent>
             </Card>
@@ -422,19 +460,45 @@ const ProfilePage: React.FC = () => {
             {(detailItems.length > 0 || formData.coverLetter) && (
               <Card>
                 <CardContent className="p-4 space-y-4">
-                  {detailItems.length > 0 && (
-                    <div>
-                      <h2 className="font-semibold text-foreground mb-3">Academic & Professional Details</h2>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                        {detailItems.map((item) => (
-                          <div key={item.label} className="rounded-lg border border-border p-3">
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">{item.label}</p>
-                            <p className="mt-1 font-medium text-foreground">{item.value}</p>
-                          </div>
-                        ))}
-                      </div>
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <h2 className="font-semibold text-foreground">Academic & Professional Details</h2>
+                      {!editingSections.academic && <EditButton section="academic" />}
                     </div>
-                  )}
+                    {editingSections.academic ? (
+                      <div className="space-y-3">
+                        {user.role === 'student' ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                            <div className="rounded-lg border border-border p-3"><Label>Roll Number</Label><Input value={formData.rollNumber || ''} onChange={e => setFormData({ ...formData, rollNumber: e.target.value })} /></div>
+                            <div className="rounded-lg border border-border p-3"><Label>Department</Label><Input value={formData.department || ''} onChange={e => setFormData({ ...formData, department: e.target.value })} /></div>
+                            <div className="rounded-lg border border-border p-3"><Label>Graduation Year</Label><Input value={formData.yearOfGraduation || ''} onChange={e => setFormData({ ...formData, yearOfGraduation: e.target.value })} /></div>
+                            <div className="rounded-lg border border-border p-3"><Label>CGPA</Label><Input value={formData.cgpa || ''} onChange={e => setFormData({ ...formData, cgpa: e.target.value })} /></div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                            <div className="rounded-lg border border-border p-3"><Label>Employee ID</Label><Input value={formData.employeeId || ''} onChange={e => setFormData({ ...formData, employeeId: e.target.value })} /></div>
+                            <div className="rounded-lg border border-border p-3"><Label>Designation</Label><Input value={formData.designation || ''} onChange={e => setFormData({ ...formData, designation: e.target.value })} /></div>
+                            <div className="rounded-lg border border-border p-3"><Label>Qualification</Label><Input value={formData.qualification || ''} onChange={e => setFormData({ ...formData, qualification: e.target.value })} /></div>
+                            <div className="rounded-lg border border-border p-3"><Label>Specialization (comma separated)</Label><Input value={(formData.specialization || []).join(', ')} onChange={e => setFormData({ ...formData, specialization: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
+                          </div>
+                        )}
+                        <SaveCancelButtons section="academic" />
+                      </div>
+                    ) : (
+                      detailItems.length > 0 && (
+                        <div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                            {detailItems.map((item) => (
+                              <div key={item.label} className="rounded-lg border border-border p-3">
+                                <p className="text-xs uppercase tracking-wide text-muted-foreground">{item.label}</p>
+                                <p className="mt-1 font-medium text-foreground">{item.value}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
 
                   {formData.coverLetter && (
                     <div>
@@ -485,7 +549,16 @@ const ProfilePage: React.FC = () => {
                             )}
                             {project.link && <a href={project.link} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1">View Project <ExternalLink size={10} /></a>}
                           </div>
-                          <button onClick={() => setFormData(p => ({ ...p, projects: p.projects.filter((pr: any) => pr.id !== project.id) }))} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={14} /></button>
+                          <button onClick={async () => {
+                            const updated = (formData.projects || []).filter((pr: any) => pr.id !== project.id);
+                            setFormData(p => ({ ...p, projects: updated }));
+                            try {
+                              await updateProfile({ projects: updated } as any);
+                              toast({ title: 'Project removed' });
+                            } catch {
+                              toast({ title: 'Error', description: 'Failed to remove project', variant: 'destructive' });
+                            }
+                          }} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={14} /></button>
                         </div>
                       </div>
                     ))}
@@ -510,7 +583,16 @@ const ProfilePage: React.FC = () => {
                           {a.description && <p className="text-xs text-foreground/85 mt-0.5">{a.description}</p>}
                           {(a.issuer || a.date) && <p className="text-xs text-foreground/75 mt-0.5">{a.issuer}{a.issuer && a.date ? ' • ' : ''}{a.date}</p>}
                         </div>
-                        <button onClick={() => setFormData(p => ({ ...p, achievements: p.achievements.filter((ac: any) => ac.id !== a.id) }))} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={14} /></button>
+                        <button onClick={async () => {
+                          const updated = (formData.achievements || []).filter((ac: any) => ac.id !== a.id);
+                          setFormData(p => ({ ...p, achievements: updated }));
+                          try {
+                            await updateProfile({ achievements: updated } as any);
+                            toast({ title: 'Achievement removed' });
+                          } catch {
+                            toast({ title: 'Error', description: 'Failed to remove achievement', variant: 'destructive' });
+                          }
+                        }} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={14} /></button>
                       </div>
                     ))}
                   </div>
@@ -526,9 +608,9 @@ const ProfilePage: React.FC = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Add Project</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Title</Label><Input value={newProject.title} onChange={e => setNewProject({ ...newProject, title: e.target.value })} /></div>
-            <div><Label>Description</Label><Textarea value={newProject.description} onChange={e => setNewProject({ ...newProject, description: e.target.value })} /></div>
-            <div><Label>Link</Label><Input value={newProject.link} onChange={e => setNewProject({ ...newProject, link: e.target.value })} placeholder="https://..." /></div>
+            <div><Label htmlFor="project-title">Title</Label><Input id="project-title" value={newProject.title} onChange={e => setNewProject({ ...newProject, title: e.target.value })} /></div>
+            <div><Label htmlFor="project-desc">Description</Label><Textarea id="project-desc" value={newProject.description} onChange={e => setNewProject({ ...newProject, description: e.target.value })} /></div>
+            <div><Label htmlFor="project-link">Link</Label><Input id="project-link" value={newProject.link} onChange={e => setNewProject({ ...newProject, link: e.target.value })} placeholder="https://..." /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setProjectDialogOpen(false)}>Cancel</Button>
@@ -542,10 +624,10 @@ const ProfilePage: React.FC = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Add Achievement</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Title</Label><Input value={newAchievement.title} onChange={e => setNewAchievement({ ...newAchievement, title: e.target.value })} /></div>
-            <div><Label>Description</Label><Textarea value={newAchievement.description} onChange={e => setNewAchievement({ ...newAchievement, description: e.target.value })} /></div>
-            <div><Label>Issuer</Label><Input value={newAchievement.issuer} onChange={e => setNewAchievement({ ...newAchievement, issuer: e.target.value })} /></div>
-            <div><Label>Date</Label><Input type="date" value={newAchievement.date} onChange={e => setNewAchievement({ ...newAchievement, date: e.target.value })} /></div>
+            <div><Label htmlFor="ach-title">Title</Label><Input id="ach-title" value={newAchievement.title} onChange={e => setNewAchievement({ ...newAchievement, title: e.target.value })} /></div>
+            <div><Label htmlFor="ach-desc">Description</Label><Textarea id="ach-desc" value={newAchievement.description} onChange={e => setNewAchievement({ ...newAchievement, description: e.target.value })} /></div>
+            <div><Label htmlFor="ach-issuer">Issuer</Label><Input id="ach-issuer" value={newAchievement.issuer} onChange={e => setNewAchievement({ ...newAchievement, issuer: e.target.value })} /></div>
+            <div><Label htmlFor="ach-date">Date</Label><Input id="ach-date" type="date" value={newAchievement.date} onChange={e => setNewAchievement({ ...newAchievement, date: e.target.value })} /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAchievementDialogOpen(false)}>Cancel</Button>
