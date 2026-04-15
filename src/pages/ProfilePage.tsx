@@ -93,7 +93,10 @@ const ProfilePage: React.FC = () => {
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [achievementDialogOpen, setAchievementDialogOpen] = useState(false);
   const [newProject, setNewProject] = useState({ title: '', description: '', link: '', skills: [] as string[] });
+  const [newProjectSkills, setNewProjectSkills] = useState('');
   const [newAchievement, setNewAchievement] = useState({ title: '', description: '', date: '', issuer: '' });
+  const [editingProject, setEditingProject] = useState<any | null>(null);
+  const [editingAchievement, setEditingAchievement] = useState<any | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -141,6 +144,12 @@ const ProfilePage: React.FC = () => {
     } catch { toast({ title: 'Error', description: 'Failed to update profile', variant: 'destructive' }); }
   };
 
+  const normalizeSkills = (skills: any) => {
+    if (!skills) return [];
+    if (Array.isArray(skills)) return skills.filter(Boolean).map((skill) => String(skill).trim());
+    return String(skills).split(',').map((skill) => skill.trim()).filter(Boolean);
+  };
+
   const handleAddSkill = () => {
     if (newSkill.trim() && !formData.skills.includes(newSkill.trim())) {
       setFormData(p => ({ ...p, skills: [...p.skills, newSkill.trim()] }));
@@ -148,34 +157,72 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  const handleAddProject = async () => {
+
+
+  const handleEditProject = (project: any) => {
+    setEditingProject(project);
+    setNewProject({
+      title: project.title || '',
+      description: project.description || '',
+      link: project.link || '',
+      skills: normalizeSkills(project.skills),
+    });
+    setNewProjectSkills(normalizeSkills(project.skills).join(', '));
+    setProjectDialogOpen(true);
+  };
+
+  const handleEditAchievement = (achievement: any) => {
+    setEditingAchievement(achievement);
+    setNewAchievement({ title: achievement.title, description: achievement.description, date: achievement.date, issuer: achievement.issuer });
+    setAchievementDialogOpen(true);
+  };
+
+  const handleSaveProject = async () => {
     if (!newProject.title.trim()) return;
-    const proj = { id: `proj_${Date.now()}`, ...newProject };
-    const updatedProjects = [...(formData.projects || []), proj];
+    const normalizedSkills = normalizeSkills(newProjectSkills);
+    let updatedProjects;
+    if (editingProject) {
+      updatedProjects = (formData.projects || []).map((p: any) =>
+        p.id === editingProject.id
+          ? { ...editingProject, ...newProject, skills: normalizedSkills }
+          : p
+      );
+    } else {
+      const proj = { id: `proj_${Date.now()}`, ...newProject, skills: normalizedSkills };
+      updatedProjects = [...(formData.projects || []), proj];
+    }
     setFormData(p => ({ ...p, projects: updatedProjects }));
     try {
       await updateProfile({ projects: updatedProjects } as any);
-      toast({ title: 'Project added', description: 'Saved to profile.' });
+      toast({ title: editingProject ? 'Project updated' : 'Project added', description: 'Saved to profile.' });
     } catch (err) {
       toast({ title: 'Error', description: 'Failed to save project', variant: 'destructive' });
     }
     setProjectDialogOpen(false);
     setNewProject({ title: '', description: '', link: '', skills: [] });
+    setNewProjectSkills('');
+    setEditingProject(null);
   };
 
-  const handleAddAchievement = async () => {
+  const handleSaveAchievement = async () => {
     if (!newAchievement.title.trim()) return;
-    const ach = { id: `ach_${Date.now()}`, ...newAchievement };
-    const updated = [...(formData.achievements || []), ach];
-    setFormData(p => ({ ...p, achievements: updated }));
+    let updatedAchievements;
+    if (editingAchievement) {
+      updatedAchievements = (formData.achievements || []).map((a: any) => a.id === editingAchievement.id ? { ...editingAchievement, ...newAchievement } : a);
+    } else {
+      const ach = { id: `ach_${Date.now()}`, ...newAchievement };
+      updatedAchievements = [...(formData.achievements || []), ach];
+    }
+    setFormData(p => ({ ...p, achievements: updatedAchievements }));
     try {
-      await updateProfile({ achievements: updated } as any);
-      toast({ title: 'Achievement added', description: 'Saved to profile.' });
+      await updateProfile({ achievements: updatedAchievements } as any);
+      toast({ title: editingAchievement ? 'Achievement updated' : 'Achievement added', description: 'Saved to profile.' });
     } catch (err) {
       toast({ title: 'Error', description: 'Failed to save achievement', variant: 'destructive' });
     }
     setAchievementDialogOpen(false);
     setNewAchievement({ title: '', description: '', date: '', issuer: '' });
+    setEditingAchievement(null);
   };
 
   const handleEnableProfileEditing = () => {
@@ -471,8 +518,8 @@ const ProfilePage: React.FC = () => {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                             <div className="rounded-lg border border-border p-3"><Label>Roll Number</Label><Input value={formData.rollNumber || ''} onChange={e => setFormData({ ...formData, rollNumber: e.target.value })} /></div>
                             <div className="rounded-lg border border-border p-3"><Label>Department</Label><Input value={formData.department || ''} onChange={e => setFormData({ ...formData, department: e.target.value })} /></div>
-                            <div className="rounded-lg border border-border p-3"><Label>Graduation Year</Label><Input value={formData.yearOfGraduation || ''} onChange={e => setFormData({ ...formData, yearOfGraduation: e.target.value })} /></div>
-                            <div className="rounded-lg border border-border p-3"><Label>CGPA</Label><Input value={formData.cgpa || ''} onChange={e => setFormData({ ...formData, cgpa: e.target.value })} /></div>
+                            <div className="rounded-lg border border-border p-3"><Label>Graduation Year</Label><Input type="number" inputMode="numeric" value={formData.yearOfGraduation || ''} onChange={e => setFormData({ ...formData, yearOfGraduation: e.target.value })} /></div>
+                            <div className="rounded-lg border border-border p-3"><Label>CGPA</Label><Input type="number" step="0.01" value={formData.cgpa || ''} onChange={e => setFormData({ ...formData, cgpa: e.target.value })} /></div>
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -532,7 +579,16 @@ const ProfilePage: React.FC = () => {
               <CardContent className="p-4">
                 <div className="flex justify-between items-center mb-3">
                   <h2 className="font-semibold text-foreground">Projects</h2>
-                  <Button size="sm" variant="outline" onClick={() => setProjectDialogOpen(true)}><Plus size={14} className="mr-1" /> Add Project</Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setNewProject({ title: '', description: '', link: '', skills: [] });
+                      setNewProjectSkills('');
+                      setEditingProject(null);
+                      setProjectDialogOpen(true);
+                    }}
+                  ><Plus size={14} className="mr-1" /> Add Project</Button>
                 </div>
                 {formData.projects.length > 0 ? (
                   <div className="space-y-3">
@@ -542,23 +598,26 @@ const ProfilePage: React.FC = () => {
                           <div className="flex-1">
                             <h3 className="font-semibold text-sm text-foreground">{project.title}</h3>
                             <p className="text-xs text-foreground/85 mt-1">{project.description}</p>
-                            {project.skills?.length > 0 && (
+                            {normalizeSkills(project.skills).length > 0 && (
                               <div className="flex flex-wrap gap-1 mt-2">
-                                {project.skills.map((s: string) => <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>)}
+                                {normalizeSkills(project.skills).map((s: string) => <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>)}
                               </div>
                             )}
                             {project.link && <a href={project.link} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1">View Project <ExternalLink size={10} /></a>}
                           </div>
-                          <button onClick={async () => {
-                            const updated = (formData.projects || []).filter((pr: any) => pr.id !== project.id);
-                            setFormData(p => ({ ...p, projects: updated }));
-                            try {
-                              await updateProfile({ projects: updated } as any);
-                              toast({ title: 'Project removed' });
-                            } catch {
-                              toast({ title: 'Error', description: 'Failed to remove project', variant: 'destructive' });
-                            }
-                          }} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={14} /></button>
+                          <div className="flex gap-1">
+                            <button onClick={() => handleEditProject(project)} className="text-muted-foreground hover:bg-muted p-1 rounded"><Edit size={14} /></button>
+                            <button onClick={async () => {
+                              const updated = (formData.projects || []).filter((pr: any) => pr.id !== project.id);
+                              setFormData(p => ({ ...p, projects: updated }));
+                              try {
+                                await updateProfile({ projects: updated } as any);
+                                toast({ title: 'Project removed' });
+                              } catch {
+                                toast({ title: 'Error', description: 'Failed to remove project', variant: 'destructive' });
+                              }
+                            }} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={14} /></button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -577,22 +636,25 @@ const ProfilePage: React.FC = () => {
                 {formData.achievements.length > 0 ? (
                   <div className="space-y-2">
                     {formData.achievements.map((a: any) => (
-                      <div key={a.id} className="flex justify-between items-center p-3 rounded-lg border border-border">
-                        <div>
-                          <h3 className="font-semibold text-sm text-foreground flex items-center gap-1"><Award size={14} className="text-united-amber" /> {a.title}</h3>
-                          {a.description && <p className="text-xs text-foreground/85 mt-0.5">{a.description}</p>}
-                          {(a.issuer || a.date) && <p className="text-xs text-foreground/75 mt-0.5">{a.issuer}{a.issuer && a.date ? ' • ' : ''}{a.date}</p>}
+                      <div key={a.id} className="flex justify-between items-start gap-4 p-3 rounded-lg border border-border">
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-sm text-foreground flex items-center gap-1 break-words"><Award size={14} className="text-united-amber" /> {a.title}</h3>
+                          {a.description && <p className="text-xs text-foreground/85 mt-0.5 break-words whitespace-pre-wrap">{a.description}</p>}
+                          {(a.issuer || a.date) && <p className="text-xs text-foreground/75 mt-0.5 break-words">{a.issuer}{a.issuer && a.date ? ' • ' : ''}{a.date}</p>}
                         </div>
-                        <button onClick={async () => {
-                          const updated = (formData.achievements || []).filter((ac: any) => ac.id !== a.id);
-                          setFormData(p => ({ ...p, achievements: updated }));
-                          try {
-                            await updateProfile({ achievements: updated } as any);
-                            toast({ title: 'Achievement removed' });
-                          } catch {
-                            toast({ title: 'Error', description: 'Failed to remove achievement', variant: 'destructive' });
-                          }
-                        }} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={14} /></button>
+                        <div className="flex gap-1 flex-shrink-0">
+                          <button onClick={() => handleEditAchievement(a)} className="text-muted-foreground hover:bg-muted p-1 rounded"><Edit size={14} /></button>
+                          <button onClick={async () => {
+                            const updated = (formData.achievements || []).filter((ac: any) => ac.id !== a.id);
+                            setFormData(p => ({ ...p, achievements: updated }));
+                            try {
+                              await updateProfile({ achievements: updated } as any);
+                              toast({ title: 'Achievement removed' });
+                            } catch {
+                              toast({ title: 'Error', description: 'Failed to remove achievement', variant: 'destructive' });
+                            }
+                          }} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={14} /></button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -603,26 +665,47 @@ const ProfilePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Add Project Dialog */}
-      <Dialog open={projectDialogOpen} onOpenChange={setProjectDialogOpen}>
+      {/* Add/Edit Project Dialog */}
+      <Dialog open={projectDialogOpen} onOpenChange={(open) => {
+        setProjectDialogOpen(open);
+        if (!open) {
+          setNewProject({ title: '', description: '', link: '', skills: [] });
+          setEditingProject(null);
+        }
+      }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add Project</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingProject ? 'Edit Project' : 'Add Project'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label htmlFor="project-title">Title</Label><Input id="project-title" value={newProject.title} onChange={e => setNewProject({ ...newProject, title: e.target.value })} /></div>
             <div><Label htmlFor="project-desc">Description</Label><Textarea id="project-desc" value={newProject.description} onChange={e => setNewProject({ ...newProject, description: e.target.value })} /></div>
             <div><Label htmlFor="project-link">Link</Label><Input id="project-link" value={newProject.link} onChange={e => setNewProject({ ...newProject, link: e.target.value })} placeholder="https://..." /></div>
+            <div>
+              <Label htmlFor="project-skills">Skills (comma separated)</Label>
+              <Input id="project-skills" value={newProjectSkills} onChange={e => setNewProjectSkills(e.target.value)} placeholder="React, Node.js, etc." />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setProjectDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddProject} className="bg-accent text-accent-foreground">Add Project</Button>
+            <Button variant="outline" onClick={() => {
+              setProjectDialogOpen(false);
+              setNewProject({ title: '', description: '', link: '', skills: [] });
+              setNewProjectSkills('');
+              setEditingProject(null);
+            }}>Cancel</Button>
+            <Button onClick={handleSaveProject} className="bg-accent text-accent-foreground">{editingProject ? 'Update Project' : 'Add Project'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Add Achievement Dialog */}
-      <Dialog open={achievementDialogOpen} onOpenChange={setAchievementDialogOpen}>
+      {/* Add/Edit Achievement Dialog */}
+      <Dialog open={achievementDialogOpen} onOpenChange={(open) => {
+        setAchievementDialogOpen(open);
+        if (!open) {
+          setNewAchievement({ title: '', description: '', date: '', issuer: '' });
+          setEditingAchievement(null);
+        }
+      }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add Achievement</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingAchievement ? 'Edit Achievement' : 'Add Achievement'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label htmlFor="ach-title">Title</Label><Input id="ach-title" value={newAchievement.title} onChange={e => setNewAchievement({ ...newAchievement, title: e.target.value })} /></div>
             <div><Label htmlFor="ach-desc">Description</Label><Textarea id="ach-desc" value={newAchievement.description} onChange={e => setNewAchievement({ ...newAchievement, description: e.target.value })} /></div>
@@ -630,8 +713,12 @@ const ProfilePage: React.FC = () => {
             <div><Label htmlFor="ach-date">Date</Label><Input id="ach-date" type="date" value={newAchievement.date} onChange={e => setNewAchievement({ ...newAchievement, date: e.target.value })} /></div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAchievementDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddAchievement} className="bg-accent text-accent-foreground">Add Achievement</Button>
+            <Button variant="outline" onClick={() => {
+              setAchievementDialogOpen(false);
+              setNewAchievement({ title: '', description: '', date: '', issuer: '' });
+              setEditingAchievement(null);
+            }}>Cancel</Button>
+            <Button onClick={handleSaveAchievement} className="bg-accent text-accent-foreground">{editingAchievement ? 'Update Achievement' : 'Add Achievement'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

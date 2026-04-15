@@ -366,6 +366,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.location.href = '/login';
   };
 
+  const parseNullableNumber = (value: any) => {
+    if (value === undefined || value === null || value === '') return null;
+    const numberValue = Number(value);
+    return Number.isNaN(numberValue) ? null : numberValue;
+  };
+
   const updateProfile = async (updates: Partial<AppUser>) => {
     if (!user) return;
     setError(null);
@@ -388,7 +394,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (updates.portfolio !== undefined) dbUpdates.portfolio = updates.portfolio;
       if (updates.rollNumber !== undefined) dbUpdates.roll_number = updates.rollNumber;
       if (updates.department !== undefined) dbUpdates.department = updates.department;
-      if (updates.yearOfGraduation !== undefined) dbUpdates.year_of_graduation = updates.yearOfGraduation;
+      if (updates.yearOfGraduation !== undefined) dbUpdates.year_of_graduation = parseNullableNumber(updates.yearOfGraduation);
       if (updates.cgpa !== undefined) dbUpdates.cgpa = updates.cgpa;
       if (updates.experience !== undefined) dbUpdates.experience = updates.experience;
       if (updates.employeeId !== undefined) dbUpdates.employee_id = updates.employeeId;
@@ -396,9 +402,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (updates.dateOfJoining !== undefined) dbUpdates.date_of_joining = updates.dateOfJoining;
       if (updates.qualification !== undefined) dbUpdates.qualification = updates.qualification;
       if (updates.specialization !== undefined) dbUpdates.specialization = updates.specialization;
-      if (updates.totalExperience !== undefined) dbUpdates.total_experience = updates.totalExperience;
-      if (updates.teachingExperience !== undefined) dbUpdates.teaching_experience = updates.teachingExperience;
-      if (updates.industryExperience !== undefined) dbUpdates.industry_experience = updates.industryExperience;
+      if (updates.totalExperience !== undefined) dbUpdates.total_experience = parseNullableNumber(updates.totalExperience);
+      if (updates.teachingExperience !== undefined) dbUpdates.teaching_experience = parseNullableNumber(updates.teachingExperience);
+      if (updates.industryExperience !== undefined) dbUpdates.industry_experience = parseNullableNumber(updates.industryExperience);
       if (updates.projects !== undefined) dbUpdates.projects = updates.projects;
       if (updates.achievements !== undefined) dbUpdates.achievements = updates.achievements;
       if (updates.resumeUrl !== undefined) dbUpdates.resume_url = updates.resumeUrl;
